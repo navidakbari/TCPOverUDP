@@ -1,6 +1,7 @@
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
 
 public class TCPPacket {
     private int sequenceNumber;
@@ -32,6 +33,12 @@ public class TCPPacket {
          this.ACK = byteToBool(12 , buff);
          this.SYN = byteToBool(13 , buff);
          this.data = new String(buff, 14, dataLength);
+         System.out.println("destinationPort= " +destinationPort);
+        System.out.println("sequenceNumber= " +sequenceNumber);
+        System.out.println("acknowledgmentNumber= " +acknowledgmentNumber);
+        System.out.println("ACK = " +ACK);
+        System.out.println("SYN = " +SYN);
+
     }
 
     private boolean byteToBool(int index, byte[] buff) {
@@ -43,8 +50,9 @@ public class TCPPacket {
     }
 
     private int byteToInt(int index, byte[] buff){
-        return (int) ((buff[index] >> 24 & 0xff ) | (buff[index + 1] >> 16 & 0xff)
-                | (buff[index + 2] >> 8 & 0xff) | ( buff[index + 3] & 0xff ));
+        ByteBuffer wrapped = ByteBuffer.wrap(buff , index , 4); // big-endian by default
+        int num = wrapped.getInt();
+        return num;
     }
 
     private byte[] createPacket(){
@@ -68,10 +76,11 @@ public class TCPPacket {
     }
 
     private void intToBytes(final int data, int index, byte[]buff) {
-        buff[index] = (byte)((data >> 24) & 0xff);
-        buff[index + 1] = (byte)((data >> 16) & 0xff);
-        buff[index + 2] = (byte)((data >> 8) & 0xff);
-        buff[index + 3] =(byte)((data) & 0xff);
+        byte[] array = ByteBuffer.allocate(4).putInt(data).array();
+        buff[index] = array[0];
+        buff[index + 1] = array[1];
+        buff[index + 2] = array[2];
+        buff[index + 3] = array[3];
     }
 
     private void injectBytes(byte[] toBuff, int index, byte[] buff){
@@ -83,6 +92,11 @@ public class TCPPacket {
         DatagramPacket dp = new DatagramPacket(buff, buff.length );
         dp.setPort(this.destinationPort);
         dp.setAddress(InetAddress.getByName(this.destinationIp));
+        System.out.println("destinationPort= " +destinationPort);
+        System.out.println("sequenceNumber= " +sequenceNumber);
+        System.out.println("acknowledgmentNumber= " +acknowledgmentNumber);
+        System.out.println("ACK = " +ACK);
+        System.out.println("SYN = " +SYN);
         return dp;
     }
 
@@ -97,4 +111,13 @@ public class TCPPacket {
     public Boolean getAckFlag(){
         return ACK;
     }
+
+    public int getSquenceNumber() {
+        return sequenceNumber;
+    }
+
+    public int getAcknowledgmentNumber() {
+        return acknowledgmentNumber;
+    }
+
 }

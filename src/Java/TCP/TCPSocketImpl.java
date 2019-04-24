@@ -1,4 +1,5 @@
 import java.io.IOException;
+import java.net.DatagramPacket;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Random;
@@ -6,9 +7,13 @@ import java.util.Random;
 public class TCPSocketImpl extends TCPSocket {
     private EnhancedDatagramSocket udp;
     private String data;
+    private int sequenceNumber;
+    private int acknowledgmentNumber;
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
         this.udp = new EnhancedDatagramSocket(port);
+        this.sequenceNumber = (new Random().nextInt( Integer.MAX_VALUE ) + 1)%10000;
+
     }
 
     @Override
@@ -27,9 +32,16 @@ public class TCPSocketImpl extends TCPSocket {
     }
 
     private boolean handShake(String destinationIp , int destinationPort) throws Exception {
-        Random rand = new Random();
-        TCPPacket packet = new TCPPacket(destinationIp , destinationPort , rand.nextInt( Integer.MAX_VALUE ) + 1 , 0 , false , true , "");
-        this.udp.send(packet.getUDPPacket());
+        TCPPacket sendPacket = new TCPPacket(destinationIp , destinationPort , sequenceNumber , 0 , false , true , "");
+        this.udp.send(sendPacket.getUDPPacket());
+        byte[] buff = new byte[1408];
+        DatagramPacket data = new DatagramPacket(buff, buff.length);
+        this.udp.receive(data);
+        TCPPacket recievedPacket = new TCPPacket(data);
+        this.acknowledgmentNumber = recievedPacket.getSquenceNumber();
+        this.sequenceNumber++;
+        sendPacket = new TCPPacket(destinationIp, destinationPort, sequenceNumber, acknowledgmentNumber+1, true, false, "");
+        this.udp.send(sendPacket.getUDPPacket());
         return true;
     }
 
