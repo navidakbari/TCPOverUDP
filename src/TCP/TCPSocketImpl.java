@@ -8,14 +8,11 @@ public class TCPSocketImpl extends TCPSocket {
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
         this.udp = new EnhancedDatagramSocket(port);
-
     }
 
     @Override
     public void send(String pathToFile) throws Exception {
-
-
-        TCPPacket packet = new TCPPacket(200, 100, 8080, "Navid");
+        TCPPacket packet = new TCPPacket(200, 100, 8080, pathToFile);
         this.udp.send(packet.getUDPPacket());
 //        throw new RuntimeException("Not implemented!");
     }

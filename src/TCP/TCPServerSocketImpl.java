@@ -13,15 +13,13 @@ public class TCPServerSocketImpl extends TCPServerSocket {
 
     @Override
     public void accept() throws Exception {
-
         byte[] buff = new byte[1408];
         DatagramPacket data = new DatagramPacket(buff, buff.length);
         this.udp.receive(data);
         TCPPacket packet = new TCPPacket(data);
+        System.out.print(packet.getData());
 
-        System.out.println(packet.getData());
-
-        throw new RuntimeException("Not implemented!");
+//        throw new RuntimeException("Not implemented!");
 
     }
 
