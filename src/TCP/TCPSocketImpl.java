@@ -1,25 +1,35 @@
-import java.net.DatagramPacket;
-import java.net.InetAddress;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.Random;
 
 public class TCPSocketImpl extends TCPSocket {
     private EnhancedDatagramSocket udp;
-
+    private String data;
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
         this.udp = new EnhancedDatagramSocket(port);
     }
 
     @Override
-    public void send(String pathToFile) throws Exception {
-        TCPPacket packet = new TCPPacket(200, 100, 8080, pathToFile);
-        this.udp.send(packet.getUDPPacket());
-//        throw new RuntimeException("Not implemented!");
+    public void send(String pathToFile, String destinationIp , int destinationPort) throws Exception {
+        this.data = readDataFromFile(pathToFile);
+        if(this.handShake(destinationIp , destinationPort)){
+//            TCPPacket packet = new TCPPacket(8080 , 200, 100, 8080, pathToFile);
+//            this.udp.send(packet.getUDPPacket());
+        }
     }
 
-    private boolean handShake()
-    {
+    private String readDataFromFile(String pathToFile) throws IOException {
+        String data;
+        data = new String(Files.readAllBytes(Paths.get(pathToFile)));
+        return data;
+    }
 
+    private boolean handShake(String destinationIp , int destinationPort) throws Exception {
+        Random rand = new Random();
+        TCPPacket packet = new TCPPacket(destinationIp , destinationPort , rand.nextInt( Integer.MAX_VALUE ) + 1 , 0 , false , true , "");
+        this.udp.send(packet.getUDPPacket());
         return true;
     }
 

@@ -1,12 +1,6 @@
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.DigestInputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 
 public abstract class TCPSocket implements CongestionWindowPlotter {
     protected int port;
@@ -16,7 +10,7 @@ public abstract class TCPSocket implements CongestionWindowPlotter {
         this.ip = ip;
     }
 
-    public abstract void send(String pathToFile) throws Exception;
+    public abstract void send(String pathToFile , String destinationIp , int destinationPort) throws Exception;
 
     public final void sendAndLog(String pathToFile) throws Exception {
         Path filePath = Paths.get(pathToFile);
@@ -32,7 +26,7 @@ public abstract class TCPSocket implements CongestionWindowPlotter {
         );
 
         long sendBeginTime = System.currentTimeMillis();
-        send(pathToFile);
+//        send(pathToFile);
 
         System.err.println(
                 String.format(

@@ -1,6 +1,4 @@
 import java.net.DatagramPacket;
-import java.util.Arrays;
-import java.util.Base64;
 
 public class TCPServerSocketImpl extends TCPServerSocket {
     private EnhancedDatagramSocket udp;
@@ -17,7 +15,9 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         DatagramPacket data = new DatagramPacket(buff, buff.length);
         this.udp.receive(data);
         TCPPacket packet = new TCPPacket(data);
-        System.out.print(packet.getData());
+        System.out.print(packet.getSynFlag());
+        System.out.print(packet.getAckFlag());
+
 
 //        throw new RuntimeException("Not implemented!");
 
