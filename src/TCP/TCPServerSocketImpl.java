@@ -4,6 +4,7 @@ import tools.Log;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.Random;
 
@@ -29,9 +30,8 @@ public class TCPServerSocketImpl extends TCPServerSocket {
 
     //TODO: This function should return a TCP SOCKET
     @Override
-    public void accept() {
-        boolean finishHandshake = false;
-        while (!finishHandshake)
+    public TCPSocket accept() {
+        while (true)
         {
             switch (handshakeState){
                 case CLOSED:
@@ -47,9 +47,7 @@ public class TCPServerSocketImpl extends TCPServerSocket {
                     waitForAck();
                     break;
                 case ESTB:
-                    establish();
-                    finishHandshake = true;
-                    break;
+                    return establish();
             }
         }
     }
@@ -129,8 +127,20 @@ public class TCPServerSocketImpl extends TCPServerSocket {
             }
         }
     }
-    private void establish() {
+    private TCPSocket establish() {
         Log.serverEstablished();
+        while (true) {
+            try {
+                return new TCPSocketImpl(
+                        Config.SERVER_IP,
+                        this.port,
+                        this.sequenceNumber,
+                        this.acknowledgmentNumber,
+                        this.udp);
+            } catch (SocketException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     @Override
