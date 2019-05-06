@@ -47,7 +47,7 @@ public class TCPServerSocketImpl extends TCPServerSocket {
                     waitForAck();
                     break;
                 case ESTB:
-                    System.out.println("Yay!!!!");
+                    establish();
                     finishHandshake = true;
                     break;
             }
@@ -57,17 +57,20 @@ public class TCPServerSocketImpl extends TCPServerSocket {
     private void changeStateToListen()
     {
         this.handshakeState = handshakeStates.LISTEN;
+        Log.listenForHandshake();
     }
 
     private void waitForSyn(){
         while(true) {
             try {
+                Log.waitForGetHandshakeSyn();
                 byte[] buff = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];
                 DatagramPacket data = new DatagramPacket(buff, buff.length);
                 this.udp.setSoTimeout(Integer.MAX_VALUE);
                 this.udp.receive(data);
                 TCPPacket receivedPacket = new TCPPacket(data);
                 if(!receivedPacket.getAckFlag() && receivedPacket.getSynFlag()){
+                    Log.handShakeSynReceived();
                     this.destinationPort = data.getPort();
                     this.destinationIp = data.getAddress();
                     this.acknowledgmentNumber = receivedPacket.getSquenceNumber();
@@ -81,8 +84,7 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         }
     }
 
-    private void sendingSynAck()
-    {
+    private void sendingSynAck() {
         while (true) {
             try {
                 TCPPacket sendPacket = new TCPPacket(
@@ -94,17 +96,16 @@ public class TCPServerSocketImpl extends TCPServerSocket {
                         true,
                         "");
                 this.udp.send(sendPacket.getUDPPacket());
+                Log.handShakeSynAckSent();
                 this.handshakeState = handshakeStates.SYN_REC;
                 break;
-
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
     }
 
-    private void waitForAck()
-    {
+    private void waitForAck() {
         while(true){
             try {
                 byte[] buff = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];
@@ -113,6 +114,7 @@ public class TCPServerSocketImpl extends TCPServerSocket {
                 TCPPacket receivedPacket = new TCPPacket(data);
                 if(receivedPacket.getAckFlag() && !receivedPacket.getSynFlag()
                     && receivedPacket.getAcknowledgmentNumber() == this.sequenceNumber + 1){
+                    Log.handShakeAckReceived();
                     this.handshakeState = handshakeStates.ESTB;
                     break;
                 }
@@ -126,6 +128,9 @@ public class TCPServerSocketImpl extends TCPServerSocket {
                 e.printStackTrace();
             }
         }
+    }
+    private void establish() {
+        Log.serverEstablished();
     }
 
     @Override
