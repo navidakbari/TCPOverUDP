@@ -1,3 +1,4 @@
+import config.Config;
 import tools.Log;
 
 import java.io.IOException;
@@ -20,8 +21,7 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         super(port);
         this.port = port;
         this.udp = new EnhancedDatagramSocket(port);
-        //TODO: TIMEOUT
-        this.udp.setSoTimeout();
+        this.udp.setSoTimeout(Config.TIMEOUT);
         this.handshakeState = handshakeStates.CLOSED;
         this.sequenceNumber = (new Random().nextInt( Integer.MAX_VALUE ) + 1)%10000;
     }
@@ -29,7 +29,7 @@ public class TCPServerSocketImpl extends TCPServerSocket {
 
     //TODO: This function should return a TCP SOCKET
     @Override
-    public void accept() throws Exception {
+    public void accept() {
         boolean finishHandshake = false;
         while (!finishHandshake)
         {
@@ -105,7 +105,8 @@ public class TCPServerSocketImpl extends TCPServerSocket {
                 DatagramPacket data = new DatagramPacket(buff, buff.length);
                 this.udp.receive(data);
                 TCPPacket receivedPacket = new TCPPacket(data);
-                if(receivedPacket.getAckFlag() && !receivedPacket.getSynFlag()){
+                if(receivedPacket.getAckFlag() && !receivedPacket.getSynFlag()
+                    && receivedPacket.getAcknowledgmentNumber() == this.sequenceNumber + 1){
                     this.handshakeState = handshakeStates.ESTB;
                     break;
                 }
