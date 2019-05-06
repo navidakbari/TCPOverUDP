@@ -34,12 +34,6 @@ public class TCPPacket {
          this.ACK = byteToBool(12 , buff);
          this.SYN = byteToBool(13 , buff);
          this.data = new String(buff, 14, dataLength);
-         System.out.println("destinationPort= " +destinationPort);
-         System.out.println("sequenceNumber= " +sequenceNumber);
-         System.out.println("acknowledgmentNumber= " +acknowledgmentNumber);
-         System.out.println("ACK = " +ACK);
-         System.out.println("SYN = " +SYN);
-
     }
 
     private boolean byteToBool(int index, byte[] buff) {
