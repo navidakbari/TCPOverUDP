@@ -1,4 +1,5 @@
 import config.Config;
+import tools.Log;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -35,14 +36,21 @@ public class TCPSocketImpl extends TCPSocket {
         return data;
     }
 
-    private void changeStateToListen(){
+    private void changeStateToSynSending(){
         this.handShakeState = handShakeStates.SYN_SENDING;
     }
 
     private void sendingSyn(String destinationIp, int destinationPort) {
         while(true) {
             try {
-                TCPPacket sendPacket = new TCPPacket(destinationIp, destinationPort, sequenceNumber, 0, false, true, "");
+                TCPPacket sendPacket = new TCPPacket(
+                        destinationIp,
+                        destinationPort,
+                        sequenceNumber,
+                        0,
+                        false,
+                        true,
+                        "");
                 this.udp.send(sendPacket.getUDPPacket());
                 this.handShakeState = handShakeStates.SYN_SENT;
                 break;
@@ -60,7 +68,7 @@ public class TCPSocketImpl extends TCPSocket {
                 DatagramPacket data = new DatagramPacket(buff, buff.length);
                 this.udp.receive(data);
                 TCPPacket receivedPacket = new TCPPacket(data);
-                if (receivedPacket.getAckFlag() && receivedPacket.getSynFlag()) {
+                if (receivedPacket.getAckFlag() && receivedPacket.getSynFlag() && receivedPacket.getAcknowledgmentNumber() == this.sequenceNumber + 1) {
                     this.acknowledgmentNumber = receivedPacket.getSquenceNumber();
                     this.sequenceNumber++;
                     this.handShakeState = handShakeStates.SENDING_ACK;
@@ -68,7 +76,9 @@ public class TCPSocketImpl extends TCPSocket {
                 }
             }catch (SocketTimeoutException e){
                 this.handShakeState = handShakeStates.SYN_SENDING;
-                e.printStackTrace();
+                Log.senderHandshakeAckTimeout();
+                break;
+
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -83,8 +93,6 @@ public class TCPSocketImpl extends TCPSocket {
                 this.udp.send(sendPacket.getUDPPacket());
             } catch (IOException e) {
                 e.printStackTrace();
-            } catch (Exception e) {
-                e.printStackTrace();
             }
 
         }
@@ -94,11 +102,12 @@ public class TCPSocketImpl extends TCPSocket {
         this.handShakeState = handShakeStates.ESTAB;
     }
 
-    private boolean handShake(String destinationIp , int destinationPort) throws Exception {
-        while(true){
+    private void handShake(String destinationIp , int destinationPort) throws Exception {
+        boolean flag = true;
+        while(flag){
             switch (this.handShakeState){
                 case CLOSED:
-                    changeStateToListen();
+                    changeStateToSynSending();
                 case SYN_SENDING:
                     sendingSyn(destinationIp , destinationPort);
                 case SYN_SENT:
@@ -107,6 +116,8 @@ public class TCPSocketImpl extends TCPSocket {
                     sendingAck(destinationIp , destinationPort);
                 case ESTAB:
                     establishing();
+                    flag = false;
+
             }
         }
     }
