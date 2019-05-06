@@ -3,6 +3,7 @@ import tools.Log;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -22,6 +23,14 @@ public class TCPSocketImpl extends TCPSocket {
         this.sequenceNumber = (new Random().nextInt( Integer.MAX_VALUE ) + 1)%10000;
         this.handShakeState = handShakeStates.CLOSED;
         this.udp.setSoTimeout(Config.TIMEOUT);
+    }
+
+    public TCPSocketImpl(String ip, int port, int sequenceNumber, int acknowledgmentNumber, EnhancedDatagramSocket udp) throws SocketException {
+        super(ip, port);
+        this.udp = udp;
+        this.sequenceNumber = sequenceNumber;
+        this.acknowledgmentNumber = acknowledgmentNumber;
+        this.handShakeState = handShakeStates.ESTAB;
     }
 
     @Override

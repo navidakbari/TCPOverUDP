@@ -5,7 +5,7 @@ import java.nio.file.Paths;
 public abstract class TCPSocket implements CongestionWindowPlotter {
     protected int port;
     protected String ip;
-    public TCPSocket(String ip, int port) throws Exception {
+    public TCPSocket(String ip, int port) {
         this.port = port;
         this.ip = ip;
     }
