@@ -27,6 +27,7 @@ public class TCPSocketImpl extends TCPSocket {
     @Override
     public void send(String pathToFile, String destinationIp , int destinationPort) throws Exception {
         this.data = readDataFromFile(pathToFile);
+        Log.SenderGoingToSendData();
         this.handShake(destinationIp , destinationPort);
     }
 
@@ -38,6 +39,7 @@ public class TCPSocketImpl extends TCPSocket {
 
     private void changeStateToSynSending(){
         this.handShakeState = handShakeStates.SYN_SENDING;
+        Log.changeStateToSynSending();
     }
 
     private void sendingSyn(String destinationIp, int destinationPort) {
@@ -53,13 +55,13 @@ public class TCPSocketImpl extends TCPSocket {
                         "");
                 this.udp.send(sendPacket.getUDPPacket());
                 this.handShakeState = handShakeStates.SYN_SENT;
+                Log.sendingSynToReceiver();
                 break;
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
     }
-
 
     private void synSent() {
         while(true) {
@@ -72,6 +74,7 @@ public class TCPSocketImpl extends TCPSocket {
                     this.acknowledgmentNumber = receivedPacket.getSquenceNumber();
                     this.sequenceNumber++;
                     this.handShakeState = handShakeStates.SENDING_ACK;
+                    Log.senderReceivedSynAckPacket();
                     break;
                 }
             }catch (SocketTimeoutException e){
@@ -90,6 +93,7 @@ public class TCPSocketImpl extends TCPSocket {
                 //TODO: send multiple ack packet
                 TCPPacket sendPacket = new TCPPacket(destinationIp, destinationPort, sequenceNumber, acknowledgmentNumber + 1, true, false, "");
                 this.udp.send(sendPacket.getUDPPacket());
+                Log.senderSendAckToReceiver();
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -99,6 +103,7 @@ public class TCPSocketImpl extends TCPSocket {
 
     private void establishing() {
         this.handShakeState = handShakeStates.ESTAB;
+        Log.senderHandshakeFinished();
     }
 
     private void handShake(String destinationIp , int destinationPort) throws Exception {
