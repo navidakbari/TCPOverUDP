@@ -1,6 +1,7 @@
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 
 public class TCPPacket {
@@ -34,10 +35,10 @@ public class TCPPacket {
          this.SYN = byteToBool(13 , buff);
          this.data = new String(buff, 14, dataLength);
          System.out.println("destinationPort= " +destinationPort);
-        System.out.println("sequenceNumber= " +sequenceNumber);
-        System.out.println("acknowledgmentNumber= " +acknowledgmentNumber);
-        System.out.println("ACK = " +ACK);
-        System.out.println("SYN = " +SYN);
+         System.out.println("sequenceNumber= " +sequenceNumber);
+         System.out.println("acknowledgmentNumber= " +acknowledgmentNumber);
+         System.out.println("ACK = " +ACK);
+         System.out.println("SYN = " +SYN);
 
     }
 
@@ -87,16 +88,11 @@ public class TCPPacket {
         System.arraycopy(buff, 0, toBuff, index, buff.length );
     }
 
-    public DatagramPacket getUDPPacket() throws Exception{
+    public DatagramPacket getUDPPacket() throws UnknownHostException {
         byte[] buff = this.createPacket();
         DatagramPacket dp = new DatagramPacket(buff, buff.length );
         dp.setPort(this.destinationPort);
         dp.setAddress(InetAddress.getByName(this.destinationIp));
-        System.out.println("destinationPort= " +destinationPort);
-        System.out.println("sequenceNumber= " +sequenceNumber);
-        System.out.println("acknowledgmentNumber= " +acknowledgmentNumber);
-        System.out.println("ACK = " +ACK);
-        System.out.println("SYN = " +SYN);
         return dp;
     }
 
