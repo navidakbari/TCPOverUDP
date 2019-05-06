@@ -21,9 +21,9 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         super(port);
         this.port = port;
         this.udp = new EnhancedDatagramSocket(port);
-        this.udp.setSoTimeout(Config.TIMEOUT);
         this.handshakeState = handshakeStates.CLOSED;
         this.sequenceNumber = (new Random().nextInt( Integer.MAX_VALUE ) + 1)%10000;
+        this.udp.setSoTimeout(Config.TIMEOUT);
     }
 
 
@@ -36,15 +36,20 @@ public class TCPServerSocketImpl extends TCPServerSocket {
             switch (handshakeState){
                 case CLOSED:
                     changeStateToListen();
+                    break;
                 case LISTEN:
                     waitForSyn();
+                    break;
                 case ACK_SENDING:
                     sendingSynAck();
+                    break;
                 case SYN_REC:
                     waitForAck();
+                    break;
                 case ESTB:
                     System.out.println("Yay!!!!");
                     finishHandshake = true;
+                    break;
             }
         }
     }
@@ -56,21 +61,22 @@ public class TCPServerSocketImpl extends TCPServerSocket {
 
     private void waitForSyn(){
         while(true) {
-            byte[] buff = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];
-            DatagramPacket data = new DatagramPacket(buff, buff.length);
             try {
+                byte[] buff = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];
+                DatagramPacket data = new DatagramPacket(buff, buff.length);
+                this.udp.setSoTimeout(Integer.MAX_VALUE);
                 this.udp.receive(data);
+                TCPPacket receivedPacket = new TCPPacket(data);
+                if(!receivedPacket.getAckFlag() && receivedPacket.getSynFlag()){
+                    this.destinationPort = data.getPort();
+                    this.destinationIp = data.getAddress();
+                    this.acknowledgmentNumber = receivedPacket.getSquenceNumber();
+                    this.handshakeState = handshakeStates.ACK_SENDING;
+                    this.udp.setSoTimeout(Config.TIMEOUT);
+                    break;
+                }
             } catch (IOException e) {
                 e.printStackTrace();
-                continue;
-            }
-            TCPPacket receivedPacket = new TCPPacket(data);
-            if(!receivedPacket.getAckFlag() && receivedPacket.getSynFlag()){
-                this.destinationPort = data.getPort();
-                this.destinationIp = data.getAddress();
-                this.acknowledgmentNumber = receivedPacket.getSquenceNumber();
-                this.handshakeState = handshakeStates.ACK_SENDING;
-                break;
             }
         }
     }

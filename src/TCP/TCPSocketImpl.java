@@ -78,7 +78,6 @@ public class TCPSocketImpl extends TCPSocket {
                 this.handShakeState = handShakeStates.SYN_SENDING;
                 Log.senderHandshakeAckTimeout();
                 break;
-
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -108,15 +107,20 @@ public class TCPSocketImpl extends TCPSocket {
             switch (this.handShakeState){
                 case CLOSED:
                     changeStateToSynSending();
+                    break;
                 case SYN_SENDING:
                     sendingSyn(destinationIp , destinationPort);
+                    break;
                 case SYN_SENT:
                     synSent();
+                    break;
                 case SENDING_ACK:
                     sendingAck(destinationIp , destinationPort);
+                    break;
                 case ESTAB:
                     establishing();
                     flag = false;
+                    break;
 
             }
         }
