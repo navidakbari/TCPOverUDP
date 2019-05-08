@@ -25,14 +25,14 @@ public class ChunkMaker {
     }
     public boolean hasRemainingChunk(int seqNum)
     {
-        return (seqNum < data.length);
+        return (seqNum * chunkSize < data.length);
     }
     public byte[] getChunk(int seqNum)
     {
         if(!hasRemainingChunk(seqNum))
             return null;
         return Arrays.copyOfRange(data,
-                seqNum,
-                ((seqNum + chunkSize) - 1 ));
+                seqNum * chunkSize,
+                ((seqNum + 1) * chunkSize) - 1 );
     }
 }
