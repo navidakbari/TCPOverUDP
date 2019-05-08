@@ -15,4 +15,5 @@ public class Log {
     public static void senderReceivedSynAckPacket() {  System.out.println("Sender receiving Syn Ack packet from receiver."); }
     public static void senderSendAckToReceiver() { System.out.println("Sender send Ack packet to receiver."); }
     public static void senderHandshakeFinished() { System.out.println("Sender handshaking finished."); }
+    public static void errorInReadingFile() { System.out.println("Error in reading from file.");}
 }

@@ -92,7 +92,7 @@ public class TCPServerSocketImpl extends TCPServerSocket {
                         acknowledgmentNumber + 1,
                         true,
                         true,
-                        "");
+                        new byte[0]);
                 this.udp.send(sendPacket.getUDPPacket());
                 Log.handShakeSynAckSent();
                 this.handshakeState = handshakeStates.SYN_REC;

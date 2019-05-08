@@ -1,23 +1,32 @@
 import config.Config;
+import tools.ChunkMaker;
 import tools.Log;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.SocketException;
+import java.net.SocketImpl;
 import java.net.SocketTimeoutException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Random;
 
+class Window
+{
+    int nextSeqNum;
+    int base;
+    TCPPacket[] packets = new TCPPacket[TCPSocketImpl.windowSize];
+}
 public class TCPSocketImpl extends TCPSocket {
     private EnhancedDatagramSocket udp;
-    private String data;
     private int sequenceNumber;
     private int acknowledgmentNumber;
     private enum handShakeStates {CLOSED , SYN_SENDING ,SYN_SENT , SENDING_ACK , ESTAB};
     private enum socketStates {IDEAL , HAND_SHAKE, GO_BACK_N_SEND, GO_BACK_N_RECEIVE};
     private handShakeStates handShakeState;
     private socketStates socketState;
+    public static final int chunkSize = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
+    public static final int windowSize = 10;
 
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
@@ -39,7 +48,6 @@ public class TCPSocketImpl extends TCPSocket {
 
     @Override
     public void send(String pathToFile, String destinationIp , int destinationPort) throws Exception {
-        this.data = readDataFromFile(pathToFile);
         while (true)
         {
             switch (this.socketState){
@@ -51,17 +59,59 @@ public class TCPSocketImpl extends TCPSocket {
                     break;
                 case GO_BACK_N_SEND:
                     Log.SenderGoingToSendData();
+                    this.goBackNSend(pathToFile, destinationIp, destinationPort);
                     break;
                 case GO_BACK_N_RECEIVE:
                     break;
             }
         }
     }
+    private void goBackNSend(String pathToFile, String destinationIp, int destinationPort) throws IOException
+    {
+        ChunkMaker chunkMaker = new ChunkMaker(pathToFile, chunkSize);
+        Window win = new Window();
+        win.base = sequenceNumber;
+        win.nextSeqNum = sequenceNumber;
+        this.udp.setSoTimeout(Integer.MAX_VALUE);
 
-    private String readDataFromFile(String pathToFile) throws IOException {
-        String data;
-        data = new String(Files.readAllBytes(Paths.get(pathToFile)));
-        return data;
+        SocketTimer timer = new SocketTimer(win);
+        while(true)
+        {
+            if(!isWindowFull(win.nextSeqNum, win.base) &&
+                    !chunkMaker.hasRemainingChunk(sequenceNumber))
+            {
+                win.packets[ win.nextSeqNum - win.base] = new TCPPacket(
+                        destinationIp,
+                        destinationPort,
+                        win.nextSeqNum,
+                        0,
+                        false,
+                        false,
+                        chunkMaker.getChunk(win.nextSeqNum));
+                udp.send(win.packets[win.nextSeqNum].getUDPPacket());
+                if(win.base == win.nextSeqNum)
+                    timer.start();
+                win.nextSeqNum ++;
+            }
+            else
+            {
+                byte[] buff = new byte[1408];
+                DatagramPacket data = new DatagramPacket(buff, buff.length);
+                this.udp.receive(data);
+                TCPPacket receivedPacket = new TCPPacket(data);
+                if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
+                    win.base = (receivedPacket.getAcknowledgmentNumber() / TCPSocketImpl.chunkSize) + 1;
+                    if (win.base == win.nextSeqNum)
+                        timer.stop();
+                    else
+                        timer.start();
+                }
+            }
+        }
+    }
+    private boolean isWindowFull(int nextSeqNum, int base)
+    {
+        return !(nextSeqNum < base + TCPSocketImpl.windowSize);
     }
 
     private void changeStateToSynSending(){
@@ -79,7 +129,7 @@ public class TCPSocketImpl extends TCPSocket {
                         0,
                         false,
                         true,
-                        "");
+                        new byte[0]);
                 this.udp.send(sendPacket.getUDPPacket());
                 this.handShakeState = handShakeStates.SYN_SENT;
                 Log.sendingSynToReceiver();
@@ -118,7 +168,7 @@ public class TCPSocketImpl extends TCPSocket {
         while (true) {
             try {
                 for (int i = 0 ; i < Config.ACK_SENDIG_LIMIT_NUMBER ; i++) {
-                    TCPPacket sendPacket = new TCPPacket(destinationIp, destinationPort, sequenceNumber, acknowledgmentNumber + 1, true, false, "");
+                    TCPPacket sendPacket = new TCPPacket(destinationIp, destinationPort, sequenceNumber, acknowledgmentNumber + 1, true, false, new byte[0]);
                     this.udp.send(sendPacket.getUDPPacket());
                 }
                 Log.senderSendAckToReceiver();

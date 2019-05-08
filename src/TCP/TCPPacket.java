@@ -1,8 +1,10 @@
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 public class TCPPacket {
     private int sequenceNumber;
@@ -12,9 +14,9 @@ public class TCPPacket {
     private int destinationPort;
     private String destinationIp;
     private int dataLength;
-    private String data;
+    private byte[] data;
 
-    TCPPacket(String destinationIp , int destinationPort , int sequenceNumber, int acknowledgmentNumber,boolean ACK , boolean SYN , String data) throws IOException {
+    TCPPacket(String destinationIp , int destinationPort , int sequenceNumber, int acknowledgmentNumber,boolean ACK , boolean SYN , byte[] data) throws IOException {
         this.sequenceNumber = sequenceNumber;
         this.acknowledgmentNumber = acknowledgmentNumber;
         this.destinationPort = destinationPort;
@@ -22,7 +24,7 @@ public class TCPPacket {
         this.ACK = ACK;
         this.SYN = SYN;
         this.data = data;
-        this.dataLength = data.length();
+        this.dataLength = data.length;
     }
 
     TCPPacket(DatagramPacket dp) {
@@ -33,7 +35,7 @@ public class TCPPacket {
          this.dataLength = byteToInt(8, buff);
          this.ACK = byteToBool(12 , buff);
          this.SYN = byteToBool(13 , buff);
-         this.data = new String(buff, 14, dataLength);
+         this.data = Arrays.copyOfRange(buff, 14, buff.length);
     }
 
     private boolean byteToBool(int index, byte[] buff) {
@@ -57,7 +59,7 @@ public class TCPPacket {
         intToBytes(this.dataLength , 8, packet);
         boolToByte(this.ACK , 12 , packet);
         boolToByte(this.SYN , 13 , packet);
-        injectBytes(packet, 14 , data.getBytes());
+        injectBytes(packet, 14 , data);
         return packet;
     }
 
@@ -90,7 +92,7 @@ public class TCPPacket {
         return dp;
     }
 
-    public String getData() {
+    public byte[] getData() {
         return data;
     }
 
