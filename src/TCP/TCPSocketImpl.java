@@ -117,10 +117,13 @@ public class TCPSocketImpl extends TCPSocket {
     private void sendingAck(String destinationIp, int destinationPort) {
         while (true) {
             try {
-                //TODO: send multiple ack packet
-                TCPPacket sendPacket = new TCPPacket(destinationIp, destinationPort, sequenceNumber, acknowledgmentNumber + 1, true, false, "");
-                this.udp.send(sendPacket.getUDPPacket());
+                for (int i = 0 ; i < Config.ACK_SENDIG_LIMIT_NUMBER ; i++) {
+                    TCPPacket sendPacket = new TCPPacket(destinationIp, destinationPort, sequenceNumber, acknowledgmentNumber + 1, true, false, "");
+                    this.udp.send(sendPacket.getUDPPacket());
+                }
                 Log.senderSendAckToReceiver();
+                this.handShakeState = handShakeStates.ESTAB;
+                break;
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -135,8 +138,8 @@ public class TCPSocketImpl extends TCPSocket {
     }
 
     private void handShake(String destinationIp , int destinationPort) throws Exception {
-        boolean flag = true;
-        while(flag){
+        boolean handshaking = true;
+        while(handshaking){
             switch (this.handShakeState){
                 case CLOSED:
                     changeStateToSynSending();
@@ -152,9 +155,8 @@ public class TCPSocketImpl extends TCPSocket {
                     break;
                 case ESTAB:
                     establishing();
-                    flag = false;
+                    handshaking = false;
                     break;
-
             }
         }
     }
