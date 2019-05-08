@@ -2,10 +2,7 @@ import config.Config;
 import tools.ChunkMaker;
 import tools.Log;
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
 import java.net.DatagramPacket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
@@ -75,8 +72,8 @@ public class TCPSocketImpl extends TCPSocket {
     private void goBackNSend(String pathToFile, String destinationIp, int destinationPort) throws IOException
     {
         Window win = new Window();
-        win.base = sequenceNumber + 1;
-        win.nextSeqNum = sequenceNumber + 1;
+        win.base = sequenceNumber ;
+        win.nextSeqNum = sequenceNumber;
         ChunkMaker chunkMaker = new ChunkMaker(pathToFile, chunkSize, win.base);
         this.udp.setSoTimeout(Integer.MAX_VALUE);
         SocketTimer timer = new SocketTimer(win, this.udp);
@@ -107,15 +104,15 @@ public class TCPSocketImpl extends TCPSocket {
             this.udp.receive(data);
             TCPPacket receivedPacket = new TCPPacket(data);
 
-            if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()
-                && receivedPacket.getAcknowledgmentNumber() == win.base) {
-                win.base ++;
+            if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
+                System.out.println("received ack with ack : " + receivedPacket.getAcknowledgmentNumber());
+                win.base = receivedPacket.getAcknowledgmentNumber() + 1;
                 if (win.base == win.nextSeqNum) {
                     timer.stop();
                     this.senderState = senderStates.FINISH_SEND;
                 }
                 else {
-                    timer.start();
+                    timer.restart();
                     this.senderState = senderStates.SEND;
                     break;
                 }
@@ -138,6 +135,7 @@ public class TCPSocketImpl extends TCPSocket {
                         false,
                         chunkMaker.getChunk(win.nextSeqNum));
                 udp.send(win.packets[win.nextSeqNum - win.base].getUDPPacket());
+                System.out.println("data with sent with seq : " + win.nextSeqNum);
                 if(win.base == win.nextSeqNum)
                     timer.start();
                 win.nextSeqNum ++;
@@ -257,6 +255,7 @@ public class TCPSocketImpl extends TCPSocket {
 
         TCPPacket receivedPacket = null;
         this.receiverState = receiverStates.RECEIVE;
+        this.udp.setSoTimeout(Integer.MAX_VALUE);
         while(true){
             switch (receiverState){
                 case RECEIVE:
@@ -274,6 +273,7 @@ public class TCPSocketImpl extends TCPSocket {
 
     private void receiverSendAck() {
         try {
+            this.acknowledgmentNumber = this.expectedSequenceNumber;
             TCPPacket sendPacket = new TCPPacket(
                     this.ip,
                     this.port,
@@ -285,6 +285,7 @@ public class TCPSocketImpl extends TCPSocket {
             this.udp.send(sendPacket.getUDPPacket());
             this.expectedSequenceNumber ++;
             this.receiverState = receiverStates.RECEIVE;
+            System.out.println("send seq Ack : " + this.acknowledgmentNumber);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -293,15 +294,12 @@ public class TCPSocketImpl extends TCPSocket {
 
     private void printToFile(TCPPacket receivedPacket , String pathToFile) {
         //TODO: CHANGE TO BYTE FILE
-        PrintWriter writer = null;
         try {
-            writer = new PrintWriter(pathToFile, "UTF-8");
-            writer.print(new String(receivedPacket.getData()));
-            writer.close();
+            OutputStream os = new FileOutputStream(new File(pathToFile), true);
+            os.write(receivedPacket.getData());
+            os.close();
             this.receiverState = receiverStates.SEND_ACK;
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (UnsupportedEncodingException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
@@ -316,6 +314,7 @@ public class TCPSocketImpl extends TCPSocket {
             if(receivedPacket.getSquenceNumber() == this.expectedSequenceNumber){
                 this.acknowledgmentNumber = receivedPacket.getSquenceNumber();
                 this.receiverState = receiverStates.WRITE_TO_FILE;
+                System.out.println("recevied packet with seq : " + this.acknowledgmentNumber);
                 return receivedPacket;
             }
         } catch (IOException e) {

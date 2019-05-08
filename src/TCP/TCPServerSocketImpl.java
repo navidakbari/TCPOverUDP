@@ -132,8 +132,8 @@ public class TCPServerSocketImpl extends TCPServerSocket {
         while (true) {
             try {
                 return new TCPSocketImpl(
-                        Config.SERVER_IP,
-                        this.port,
+                        this.destinationIp.getHostName(),
+                        this.destinationPort,
                         this.sequenceNumber,
                         this.acknowledgmentNumber,
                         this.udp);

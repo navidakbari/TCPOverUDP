@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.util.Timer;
 import java.util.TimerTask;
 
-public class SocketTimer extends TimerTask {
+public class SocketTimer {
     private static final int DELAY = 150;
     private static final int PERIOD = 150;
 
@@ -19,7 +19,7 @@ public class SocketTimer extends TimerTask {
 
     public void start() {
         timer = new Timer();
-        timer.schedule(this, DELAY, PERIOD);
+        timer.schedule(new SocketTimerTask(window, udp), DELAY, PERIOD);
     }
 
     public void stop() {
@@ -29,6 +29,16 @@ public class SocketTimer extends TimerTask {
     public void restart() {
         stop();
         start();
+    }
+
+}
+class SocketTimerTask extends TimerTask{
+    private Window window;
+    private EnhancedDatagramSocket udp;
+    SocketTimerTask(Window win, EnhancedDatagramSocket udp)
+    {
+        this.window = win;
+        this.udp = udp;
     }
     public void run()
     {

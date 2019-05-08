@@ -35,7 +35,7 @@ public class TCPPacket {
          this.dataLength = byteToInt(8, buff);
          this.ACK = byteToBool(12 , buff);
          this.SYN = byteToBool(13 , buff);
-         this.data = Arrays.copyOfRange(buff, 14, buff.length);
+         this.data = Arrays.copyOfRange(buff, 14, this.dataLength + 14);
     }
 
     private boolean byteToBool(int index, byte[] buff) {
