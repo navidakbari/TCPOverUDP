@@ -252,7 +252,6 @@ public class TCPSocketImpl extends TCPSocket {
     @Override
     public void receive(String pathToFile) throws Exception {
         this.socketState = socketStates.GO_BACK_N_RECEIVE;
-
         TCPPacket receivedPacket = null;
         this.receiverState = receiverStates.RECEIVE;
         this.udp.setSoTimeout(Integer.MAX_VALUE);
