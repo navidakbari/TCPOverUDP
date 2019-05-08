@@ -1,7 +1,10 @@
 import config.Config;
 import tools.Log;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
 import java.net.DatagramPacket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
@@ -16,8 +19,11 @@ public class TCPSocketImpl extends TCPSocket {
     private int acknowledgmentNumber;
     private enum handShakeStates {CLOSED , SYN_SENDING ,SYN_SENT , SENDING_ACK , ESTAB};
     private enum socketStates {IDEAL , HAND_SHAKE, GO_BACK_N_SEND, GO_BACK_N_RECEIVE};
+    private enum receiverStates {RECEIVE, WRITE_TO_FILE, SEND_ACK};
+    private int expectedSequenceNumber;
     private handShakeStates handShakeState;
     private socketStates socketState;
+    private receiverStates receiverState;
 
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
@@ -32,9 +38,11 @@ public class TCPSocketImpl extends TCPSocket {
         super(ip, port);
         this.udp = udp;
         this.sequenceNumber = sequenceNumber;
+        //TODO: plus chunk size
+        this.expectedSequenceNumber = sequenceNumber;
         this.acknowledgmentNumber = acknowledgmentNumber;
         this.handShakeState = handShakeStates.ESTAB;
-        this.socketState = socketStates.GO_BACK_N_RECEIVE;
+        this.socketState = socketStates.IDEAL;
     }
 
     @Override
@@ -51,8 +59,6 @@ public class TCPSocketImpl extends TCPSocket {
                     break;
                 case GO_BACK_N_SEND:
                     Log.SenderGoingToSendData();
-                    break;
-                case GO_BACK_N_RECEIVE:
                     break;
             }
         }
@@ -163,8 +169,74 @@ public class TCPSocketImpl extends TCPSocket {
 
     @Override
     public void receive(String pathToFile) throws Exception {
-        throw new RuntimeException("Not implemented!");
+        this.socketState = socketStates.GO_BACK_N_RECEIVE;
+
+        TCPPacket receivedPacket = null;
+        this.receiverState = receiverStates.RECEIVE;
+        while(true){
+            switch (receiverState){
+                case RECEIVE:
+                    receivedPacket = goBackNReceive();
+                case WRITE_TO_FILE:
+                    printToFile(receivedPacket , pathToFile);
+                case SEND_ACK:
+                    receiverSendAck();
+            }
+        }
     }
+
+    private void receiverSendAck() {
+        try {
+            TCPPacket sendPacket = new TCPPacket(
+                    this.ip,
+                    this.port,
+                    0,
+                    this.acknowledgmentNumber,
+                    false,
+                    false,
+                    "");
+            this.udp.send(sendPacket.getUDPPacket());
+            //TODO: add expecpted
+//            this.expectedSequenceNumber +=
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    private void printToFile(TCPPacket receivedPacket , String pathToFile) {
+        PrintWriter writer = null;
+        try {
+            writer = new PrintWriter(pathToFile, "UTF-8");
+            writer.println(receivedPacket.getData());
+            writer.close();
+            this.receiverState = receiverStates.SEND_ACK;
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    private TCPPacket goBackNReceive() {
+        try {
+            byte[] buff = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];
+            DatagramPacket data = new DatagramPacket(buff, buff.length);
+            this.udp.receive(data);
+            TCPPacket receivedPacket = new TCPPacket(data);
+            if(receivedPacket.getSquenceNumber() == this.expectedSequenceNumber){
+                //TODO: add sequence number
+                this.acknowledgmentNumber = receivedPacket.getSquenceNumber();
+                this.receiverState = receiverStates.WRITE_TO_FILE;
+                return receivedPacket;
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
 
     @Override
     public void close() throws Exception {
