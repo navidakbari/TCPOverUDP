@@ -44,7 +44,7 @@ public class TCPSocketImpl extends TCPSocket {
         super(ip, port);
         this.udp = udp;
         this.sequenceNumber = sequenceNumber;
-        this.expectedSequenceNumber = sequenceNumber + TCPSocketImpl.chunkSize;
+        this.expectedSequenceNumber = acknowledgmentNumber + 1;
         this.acknowledgmentNumber = acknowledgmentNumber;
         this.handShakeState = handShakeStates.ESTAB;
         this.socketState = socketStates.IDEAL;
@@ -242,7 +242,7 @@ public class TCPSocketImpl extends TCPSocket {
                     false,
                     new byte[0]);
             this.udp.send(sendPacket.getUDPPacket());
-            this.expectedSequenceNumber += TCPSocketImpl.chunkSize;
+            this.expectedSequenceNumber ++;
             this.receiverState = receiverStates.RECEIVE;
         } catch (IOException e) {
             e.printStackTrace();
