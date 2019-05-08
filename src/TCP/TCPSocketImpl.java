@@ -272,7 +272,6 @@ public class TCPSocketImpl extends TCPSocket {
 
     private void receiverSendAck() {
         try {
-            this.acknowledgmentNumber = this.expectedSequenceNumber;
             TCPPacket sendPacket = new TCPPacket(
                     this.ip,
                     this.port,
@@ -310,11 +309,16 @@ public class TCPSocketImpl extends TCPSocket {
             DatagramPacket data = new DatagramPacket(buff, buff.length);
             this.udp.receive(data);
             TCPPacket receivedPacket = new TCPPacket(data);
+            if(!receivedPacket.getAckFlag() && !receivedPacket.getSynFlag())
+                return null;
             if(receivedPacket.getSquenceNumber() == this.expectedSequenceNumber){
                 this.acknowledgmentNumber = receivedPacket.getSquenceNumber();
                 this.receiverState = receiverStates.WRITE_TO_FILE;
                 System.out.println("recevied packet with seq : " + this.acknowledgmentNumber);
                 return receivedPacket;
+            }else {
+                this.receiverState = receiverStates.SEND_ACK;
+                System.out.println("dup ack seq : " + this.acknowledgmentNumber);
             }
         } catch (IOException e) {
             e.printStackTrace();
