@@ -9,8 +9,10 @@ import java.util.Arrays;
 public class ChunkMaker {
     private byte[] data;
     private int chunkSize;
-    public ChunkMaker(String pathToFile, int chunkSize)
+    private int base;
+    public ChunkMaker(String pathToFile, int chunkSize, int base)
     {
+        this.base = base;
         this.chunkSize = chunkSize;
         readDataFromFile(pathToFile);
     }
@@ -25,14 +27,14 @@ public class ChunkMaker {
     }
     public boolean hasRemainingChunk(int seqNum)
     {
-        return (seqNum * chunkSize < data.length);
+        return (( seqNum - base ) * chunkSize < data.length);
     }
     public byte[] getChunk(int seqNum)
     {
         if(!hasRemainingChunk(seqNum))
             return null;
         return Arrays.copyOfRange(data,
-                seqNum * chunkSize,
-                ((seqNum + 1) * chunkSize) - 1 );
+                ( seqNum - base) * chunkSize,
+                ((seqNum - base + 1) * chunkSize) - 1 );
     }
 }
