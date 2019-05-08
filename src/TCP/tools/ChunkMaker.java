@@ -35,6 +35,6 @@ public class ChunkMaker {
             return null;
         return Arrays.copyOfRange(data,
                 ( seqNum - base) * chunkSize,
-                ((seqNum - base + 1) * chunkSize) - 1 );
+                (seqNum - base + 1) * chunkSize );
     }
 }

@@ -3,8 +3,8 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 public class SocketTimer {
-    private static final int DELAY = 2000;
-    private static final int PERIOD = 2000;
+    private static final int DELAY = 50;
+    private static final int PERIOD = 50;
 
     private Timer timer;
     private Window window;
@@ -40,11 +40,14 @@ class SocketTimerTask extends TimerTask{
     }
     public void run()
     {
-        for( int i = 0 ; i < window.nextSeqNum - window.base - 1; i++)
+        for( int i = window.base ; i < window.nextSeqNum ; i++)
         {
             try {
-                this.udp.send(window.packets[i].getUDPPacket());
-                System.out.println("timeout packet send : " + (window.base + i));
+                this.udp.send(window.packets.get(i).getUDPPacket());
+                System.out.println("timeout packet send : " + (i));
+                System.out.println("timeout packet : " + (window.packets.get(i).getUDPPacket().getAddress()));
+                System.out.println("timeout packet : " + (window.packets.get(i).getUDPPacket().getPort()));
+                System.out.println("timeout packet: " + window.packets.get(i).getSynFlag() + " " + window.packets.get(i).getAckFlag() );
             } catch (IOException e) {
                 e.printStackTrace();
             }

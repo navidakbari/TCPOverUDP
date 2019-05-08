@@ -6,13 +6,14 @@ import java.io.*;
 import java.net.DatagramPacket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.HashMap;
 import java.util.Random;
 
 class Window
 {
     int nextSeqNum;
     int base;
-    TCPPacket[] packets = new TCPPacket[TCPSocketImpl.windowSize];
+    HashMap<Integer, TCPPacket> packets = new HashMap<>();
 }
 public class TCPSocketImpl extends TCPSocket {
     private EnhancedDatagramSocket udp;
@@ -20,7 +21,7 @@ public class TCPSocketImpl extends TCPSocket {
     private int acknowledgmentNumber;
     private enum handShakeStates {CLOSED , SYN_SENDING ,SYN_SENT , SENDING_ACK , ESTAB};
     private enum socketStates {IDEAL , HAND_SHAKE, GO_BACK_N_SEND, GO_BACK_N_RECEIVE};
-    private enum receiverStates {RECEIVE, WRITE_TO_FILE, SEND_ACK};
+    private enum receiverStates {RECEIVE, WRITE_TO_FILE, SEND_ACK, SEND_DUP_ACK};
     private enum senderStates {SEND, RECEIVE_ACK, FINISH_SEND}
     private int expectedSequenceNumber;
     private handShakeStates handShakeState;
@@ -91,6 +92,7 @@ public class TCPSocketImpl extends TCPSocket {
                     break;
                 case FINISH_SEND:
                     sending = false;
+                    System.out.println("FINIIIIIIIIISH");
                     break;
             }
         }
@@ -126,15 +128,15 @@ public class TCPSocketImpl extends TCPSocket {
             if(!isWindowFull(win.nextSeqNum, win.base) &&
                     chunkMaker.hasRemainingChunk(win.nextSeqNum))
             {
-                win.packets[ win.nextSeqNum - win.base] = new TCPPacket(
+                win.packets.put(win.nextSeqNum,  new TCPPacket(
                         destinationIp,
                         destinationPort,
                         win.nextSeqNum ,
                         0,
                         false,
                         false,
-                        chunkMaker.getChunk(win.nextSeqNum));
-                udp.send(win.packets[win.nextSeqNum - win.base].getUDPPacket());
+                        chunkMaker.getChunk(win.nextSeqNum)));
+                udp.send(win.packets.get(win.nextSeqNum).getUDPPacket());
                 System.out.println("data with sent with seq : " + win.nextSeqNum);
                 if(win.base == win.nextSeqNum)
                     timer.start();
@@ -256,6 +258,7 @@ public class TCPSocketImpl extends TCPSocket {
         this.receiverState = receiverStates.RECEIVE;
         this.udp.setSoTimeout(Integer.MAX_VALUE);
         while(true){
+            System.out.println(this.receiverState);
             switch (receiverState){
                 case RECEIVE:
                     receivedPacket = goBackNReceive();
@@ -263,10 +266,29 @@ public class TCPSocketImpl extends TCPSocket {
                 case WRITE_TO_FILE:
                     printToFile(receivedPacket , pathToFile);
                     break;
+                case SEND_DUP_ACK:
+                    sendDupAck();
+                    break;
                 case SEND_ACK:
                     receiverSendAck();
                     break;
             }
+        }
+    }
+    private void sendDupAck() {
+        try {
+            TCPPacket sendPacket = new TCPPacket(
+                    this.ip,
+                    this.port,
+                    0,
+                    this.acknowledgmentNumber,
+                    false,
+                    false,
+                    new byte[0]);
+            this.udp.send(sendPacket.getUDPPacket());
+            this.receiverState = receiverStates.RECEIVE;
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
@@ -305,11 +327,12 @@ public class TCPSocketImpl extends TCPSocket {
 
     private TCPPacket goBackNReceive() {
         try {
+            System.out.println("receive expected : " + this.expectedSequenceNumber);
             byte[] buff = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];
             DatagramPacket data = new DatagramPacket(buff, buff.length);
             this.udp.receive(data);
             TCPPacket receivedPacket = new TCPPacket(data);
-            if(!receivedPacket.getAckFlag() && !receivedPacket.getSynFlag())
+            if(receivedPacket.getAckFlag() || receivedPacket.getSynFlag())
                 return null;
             if(receivedPacket.getSquenceNumber() == this.expectedSequenceNumber){
                 this.acknowledgmentNumber = receivedPacket.getSquenceNumber();
@@ -317,8 +340,9 @@ public class TCPSocketImpl extends TCPSocket {
                 System.out.println("recevied packet with seq : " + this.acknowledgmentNumber);
                 return receivedPacket;
             }else {
-                this.receiverState = receiverStates.SEND_ACK;
-                System.out.println("dup ack seq : " + this.acknowledgmentNumber);
+                this.receiverState = receiverStates.SEND_DUP_ACK;
+                System.out.println("dup ack seq  : " + this.acknowledgmentNumber
+                                    + " for " + receivedPacket.getSquenceNumber());
             }
         } catch (IOException e) {
             e.printStackTrace();
