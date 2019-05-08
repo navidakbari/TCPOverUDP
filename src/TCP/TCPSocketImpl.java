@@ -2,13 +2,13 @@ import config.Config;
 import tools.ChunkMaker;
 import tools.Log;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.UnsupportedEncodingException;
 import java.net.DatagramPacket;
 import java.net.SocketException;
-import java.net.SocketImpl;
 import java.net.SocketTimeoutException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.Random;
 
 class Window
@@ -23,10 +23,13 @@ public class TCPSocketImpl extends TCPSocket {
     private int acknowledgmentNumber;
     private enum handShakeStates {CLOSED , SYN_SENDING ,SYN_SENT , SENDING_ACK , ESTAB};
     private enum socketStates {IDEAL , HAND_SHAKE, GO_BACK_N_SEND, GO_BACK_N_RECEIVE};
+    private enum receiverStates {RECEIVE, WRITE_TO_FILE, SEND_ACK};
+    private int expectedSequenceNumber;
     private handShakeStates handShakeState;
     private socketStates socketState;
     public static final int chunkSize = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
     public static final int windowSize = 10;
+    private receiverStates receiverState;
 
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
@@ -41,9 +44,10 @@ public class TCPSocketImpl extends TCPSocket {
         super(ip, port);
         this.udp = udp;
         this.sequenceNumber = sequenceNumber;
+        this.expectedSequenceNumber = sequenceNumber + TCPSocketImpl.chunkSize;
         this.acknowledgmentNumber = acknowledgmentNumber;
         this.handShakeState = handShakeStates.ESTAB;
-        this.socketState = socketStates.GO_BACK_N_RECEIVE;
+        this.socketState = socketStates.IDEAL;
     }
 
     @Override
@@ -60,8 +64,6 @@ public class TCPSocketImpl extends TCPSocket {
                 case GO_BACK_N_SEND:
                     Log.SenderGoingToSendData();
                     this.goBackNSend(pathToFile, destinationIp, destinationPort);
-                    break;
-                case GO_BACK_N_RECEIVE:
                     break;
             }
         }
@@ -213,8 +215,74 @@ public class TCPSocketImpl extends TCPSocket {
 
     @Override
     public void receive(String pathToFile) throws Exception {
-        throw new RuntimeException("Not implemented!");
+        this.socketState = socketStates.GO_BACK_N_RECEIVE;
+
+        TCPPacket receivedPacket = null;
+        this.receiverState = receiverStates.RECEIVE;
+        while(true){
+            switch (receiverState){
+                case RECEIVE:
+                    receivedPacket = goBackNReceive();
+                case WRITE_TO_FILE:
+                    printToFile(receivedPacket , pathToFile);
+                case SEND_ACK:
+                    receiverSendAck();
+            }
+        }
     }
+
+    private void receiverSendAck() {
+        try {
+            TCPPacket sendPacket = new TCPPacket(
+                    this.ip,
+                    this.port,
+                    0,
+                    this.acknowledgmentNumber,
+                    false,
+                    false,
+                    new byte[0]);
+            this.udp.send(sendPacket.getUDPPacket());
+            this.expectedSequenceNumber += TCPSocketImpl.chunkSize;
+            this.receiverState = receiverStates.RECEIVE;
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    private void printToFile(TCPPacket receivedPacket , String pathToFile) {
+        //TODO: CHANGE TO BYTE FILE
+        PrintWriter writer = null;
+        try {
+            writer = new PrintWriter(pathToFile, "UTF-8");
+            writer.print(receivedPacket.getData());
+            writer.close();
+            this.receiverState = receiverStates.SEND_ACK;
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    private TCPPacket goBackNReceive() {
+        try {
+            byte[] buff = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];
+            DatagramPacket data = new DatagramPacket(buff, buff.length);
+            this.udp.receive(data);
+            TCPPacket receivedPacket = new TCPPacket(data);
+            if(receivedPacket.getSquenceNumber() == this.expectedSequenceNumber){
+                this.acknowledgmentNumber = receivedPacket.getSquenceNumber();
+                this.receiverState = receiverStates.WRITE_TO_FILE;
+                return receivedPacket;
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
 
     @Override
     public void close() throws Exception {
