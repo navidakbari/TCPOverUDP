@@ -30,7 +30,7 @@ public class TCPSocketImpl extends TCPSocket {
     private socketStates socketState;
     private senderStates senderState;
 
-    public static final int chunkSize = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES;
+    public static final int chunkSize = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 20;
     public static final int windowSize = 10;
     private receiverStates receiverState;
 
@@ -74,10 +74,10 @@ public class TCPSocketImpl extends TCPSocket {
     }
     private void goBackNSend(String pathToFile, String destinationIp, int destinationPort) throws IOException
     {
-        ChunkMaker chunkMaker = new ChunkMaker(pathToFile, chunkSize);
         Window win = new Window();
         win.base = sequenceNumber + 1;
         win.nextSeqNum = sequenceNumber + 1;
+        ChunkMaker chunkMaker = new ChunkMaker(pathToFile, chunkSize, win.base);
         this.udp.setSoTimeout(Integer.MAX_VALUE);
         SocketTimer timer = new SocketTimer(win, this.udp);
 
@@ -127,7 +127,7 @@ public class TCPSocketImpl extends TCPSocket {
         while (true)
         {
             if(!isWindowFull(win.nextSeqNum, win.base) &&
-                    !chunkMaker.hasRemainingChunk(sequenceNumber + win.nextSeqNum * chunkSize))
+                    chunkMaker.hasRemainingChunk(win.nextSeqNum))
             {
                 win.packets[ win.nextSeqNum - win.base] = new TCPPacket(
                         destinationIp,

@@ -53,7 +53,7 @@ public class TCPPacket {
     }
 
     private byte[] createPacket(){
-        byte[] packet = new byte[1408];
+        byte[] packet = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES];
         intToBytes(this.sequenceNumber, 0, packet);
         intToBytes(this.acknowledgmentNumber, 4, packet);
         intToBytes(this.dataLength , 8, packet);
