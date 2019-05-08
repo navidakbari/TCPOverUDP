@@ -5,7 +5,7 @@ import java.net.SocketTimeoutException;
 public class Sender {
     public static void main(String[] args) throws Exception {
         TCPSocket tcpSocket = new TCPSocketImpl("127.0.0.1", 9000);
-        tcpSocket.send("./src/Sender/file.txt" , "172.20.10.4" , 8080);
+        tcpSocket.send("./src/Sender/file.txt" , "127.0.0.1" , 8080);
 //        try {
 //            EnhancedDatagramSocket datagramSocket = new EnhancedDatagramSocket(8000);
 //            datagramSocket.setSoTimeout(2000);
