@@ -15,13 +15,16 @@ public class TCPSocketImpl extends TCPSocket {
     private int sequenceNumber;
     private int acknowledgmentNumber;
     private enum handShakeStates {CLOSED , SYN_SENDING ,SYN_SENT , SENDING_ACK , ESTAB};
+    private enum socketStates {IDEAL , HAND_SHAKE, GO_BACK_N_SEND, GO_BACK_N_RECEIVE};
     private handShakeStates handShakeState;
+    private socketStates socketState;
 
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
         this.udp = new EnhancedDatagramSocket(port);
         this.sequenceNumber = (new Random().nextInt( Integer.MAX_VALUE ) + 1)%10000;
         this.handShakeState = handShakeStates.CLOSED;
+        this.socketState = socketStates.IDEAL;
         this.udp.setSoTimeout(Config.TIMEOUT);
     }
 
@@ -31,13 +34,28 @@ public class TCPSocketImpl extends TCPSocket {
         this.sequenceNumber = sequenceNumber;
         this.acknowledgmentNumber = acknowledgmentNumber;
         this.handShakeState = handShakeStates.ESTAB;
+        this.socketState = socketStates.GO_BACK_N_RECEIVE;
     }
 
     @Override
     public void send(String pathToFile, String destinationIp , int destinationPort) throws Exception {
         this.data = readDataFromFile(pathToFile);
-        Log.SenderGoingToSendData();
-        this.handShake(destinationIp , destinationPort);
+        while (true)
+        {
+            switch (this.socketState){
+                case IDEAL:
+                    this.socketState = socketStates.HAND_SHAKE;
+                    break;
+                case HAND_SHAKE:
+                    this.handShake(destinationIp, destinationPort);
+                    break;
+                case GO_BACK_N_SEND:
+                    Log.SenderGoingToSendData();
+                    break;
+                case GO_BACK_N_RECEIVE:
+                    break;
+            }
+        }
     }
 
     private String readDataFromFile(String pathToFile) throws IOException {
@@ -112,6 +130,7 @@ public class TCPSocketImpl extends TCPSocket {
 
     private void establishing() {
         this.handShakeState = handShakeStates.ESTAB;
+        this.socketState = socketStates.GO_BACK_N_SEND;
         Log.senderHandshakeFinished();
     }
 
