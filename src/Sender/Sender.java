@@ -23,7 +23,7 @@ public class Sender {
 //            e.printStackTrace();
 //        }
 
-//        tcpSocket.close();
+        tcpSocket.close();
 //        tcpSocket.saveCongestionWindowPlot();
     }
 }

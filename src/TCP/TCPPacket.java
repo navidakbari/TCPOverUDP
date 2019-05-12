@@ -108,6 +108,14 @@ public class TCPPacket {
         return ACK;
     }
 
+    public void setFIN(boolean FIN) {
+        this.FIN = FIN;
+    }
+
+    public boolean isFIN() {
+        return FIN;
+    }
+
     public int getSquenceNumber() {
         return sequenceNumber;
     }

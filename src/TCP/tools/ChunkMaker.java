@@ -19,7 +19,6 @@ public class ChunkMaker {
     private void readDataFromFile(String pathToFile) {
         try {
             data = Files.readAllBytes(Paths.get(pathToFile));
-            System.out.println(Arrays.toString(data));
         } catch (IOException e) {
             e.printStackTrace();
             Log.errorInReadingFile();

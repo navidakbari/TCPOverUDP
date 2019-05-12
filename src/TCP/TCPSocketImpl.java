@@ -1,10 +1,11 @@
 import config.Config;
 import tools.ChunkMaker;
 import tools.Log;
-
-import java.io.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.net.DatagramPacket;
-import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.HashMap;
@@ -27,8 +28,8 @@ public class TCPSocketImpl extends TCPSocket {
     private int sequenceNumber;
     private int acknowledgmentNumber;
     private enum handShakeStates {CLOSED , SYN_SENDING ,SYN_SENT , SENDING_ACK , ESTAB};
-    private enum socketStates {IDEAL , HAND_SHAKE, GO_BACK_N_SEND, GO_BACK_N_RECEIVE};
-    private enum receiverStates {RECEIVE, WRITE_TO_FILE, SEND_ACK, SEND_DUP_ACK};
+    private enum socketStates {IDEAL , HAND_SHAKE, GO_BACK_N_SEND, GO_BACK_N_RECEIVE, CLOSE};
+    private enum receiverStates {RECEIVE, WRITE_TO_FILE, SEND_ACK, SEND_DUP_ACK, CLOSE};
     private enum senderStates {SEND, RECEIVE_ACK, FINISH_SEND}
     private int expectedSequenceNumber;
     private handShakeStates handShakeState;
@@ -38,7 +39,7 @@ public class TCPSocketImpl extends TCPSocket {
     private int cwndCounter = 0;
 
     public static final int chunkSize = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 20;
-    public static int windowSize = 10;
+
     private receiverStates receiverState;
 
     public TCPSocketImpl(String ip, int port) throws Exception {
@@ -63,7 +64,8 @@ public class TCPSocketImpl extends TCPSocket {
 
     @Override
     public void send(String pathToFile, String destinationIp , int destinationPort) throws Exception {
-        while (true)
+        boolean sending = true;
+        while (sending)
         {
             switch (this.socketState){
                 case IDEAL:
@@ -75,6 +77,9 @@ public class TCPSocketImpl extends TCPSocket {
                 case GO_BACK_N_SEND:
                     Log.SenderGoingToSendData();
                     this.goBackNSend(pathToFile, destinationIp, destinationPort);
+                    break;
+                case CLOSE:
+                    sending = false;
                     break;
             }
         }
@@ -107,6 +112,7 @@ public class TCPSocketImpl extends TCPSocket {
                 case FINISH_SEND:
                     sending = false;
                     System.out.println("FINIIIIIIIIISH");
+                    socketState = socketStates.CLOSE;
                     break;
             }
         }
@@ -114,19 +120,16 @@ public class TCPSocketImpl extends TCPSocket {
 
     private void receiveACKs(Window win, SocketTimer timer) throws IOException
     {
-        while(true) {
-
-            switch (win.congestionState) {
-                case SLOW_START:
-                    slowStart(win, timer);
-                    break;
-                case FAST_RECOVERY:
-                    fastRecovery(win, timer);
-                    break;
-                case CONGESTION_AVOIDANCE:
-                    congestionAvoidance(win, timer);
-                    break;
-            }
+        switch (win.congestionState) {
+            case SLOW_START:
+                slowStart(win, timer);
+                break;
+            case FAST_RECOVERY:
+                fastRecovery(win, timer);
+                break;
+            case CONGESTION_AVOIDANCE:
+                congestionAvoidance(win, timer);
+                break;
         }
     }
 
@@ -135,7 +138,6 @@ public class TCPSocketImpl extends TCPSocket {
         DatagramPacket data = new DatagramPacket(buff, buff.length);
         this.udp.receive(data);
         TCPPacket receivedPacket = new TCPPacket(data);
-
         if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
             if(lastAcked == receivedPacket.getAcknowledgmentNumber()){
                 win.cwnd += 1;
@@ -144,6 +146,7 @@ public class TCPSocketImpl extends TCPSocket {
                 win.cwnd = win.sshtresh;
                 win.dupAckCount = 0;
                 moveBase(win, timer, receivedPacket);
+                win.congestionState = Window.congestionStates.CONGESTION_AVOIDANCE;
             }
         }
 
@@ -163,14 +166,8 @@ public class TCPSocketImpl extends TCPSocket {
     }
     private void moveBase(Window win, SocketTimer timer, TCPPacket receivedPacket){
         win.base = receivedPacket.getAcknowledgmentNumber() + 1;
-        if (win.base == win.nextSeqNum) {
-            timer.stop();
-            this.senderState = senderStates.FINISH_SEND;
-        }
-        else {
-            timer.restart();
-            this.senderState = senderStates.SEND;
-        }
+        timer.restart();
+        this.senderState = senderStates.SEND;
         lastAcked = receivedPacket.getAcknowledgmentNumber();
     }
     private void congestionAvoidance(Window win, SocketTimer timer) throws IOException {
@@ -178,7 +175,6 @@ public class TCPSocketImpl extends TCPSocket {
         DatagramPacket data = new DatagramPacket(buff, buff.length);
         this.udp.receive(data);
         TCPPacket receivedPacket = new TCPPacket(data);
-
         if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
             if(lastAcked == receivedPacket.getAcknowledgmentNumber()){
                handleDupAck(win);
@@ -196,7 +192,6 @@ public class TCPSocketImpl extends TCPSocket {
         DatagramPacket data = new DatagramPacket(buff, buff.length);
         this.udp.receive(data);
         TCPPacket receivedPacket = new TCPPacket(data);
-
         if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
             if(lastAcked == receivedPacket.getAcknowledgmentNumber()){
                 handleDupAck(win);
@@ -213,7 +208,7 @@ public class TCPSocketImpl extends TCPSocket {
     {
         while (true)
         {
-            if(!isWindowFull(win.nextSeqNum, win.base) &&
+            if(!isWindowFull(win) &&
                     chunkMaker.hasRemainingChunk(win.nextSeqNum))
             {
                 win.packets.put(win.nextSeqNum,  new TCPPacket(
@@ -233,8 +228,13 @@ public class TCPSocketImpl extends TCPSocket {
             else{
                 if(chunkMaker.hasRemainingChunk(win.nextSeqNum))
                     this.senderState = senderStates.RECEIVE_ACK;
-//                else
-//                    this.sendFin(destinationIp, destinationPort);
+                else {
+                    for (int i = 0; i < 100; i++) {
+                        this.sendFin(destinationIp, destinationPort);
+                    }
+                    this.senderState = senderStates.FINISH_SEND;
+                    timer.stop();
+                }
                 break;
             }
         }
@@ -248,11 +248,14 @@ public class TCPSocketImpl extends TCPSocket {
                 false,
                 false,
                 new byte[0]);
+        sendPacket.setFIN(true);
         this.udp.send(sendPacket.getUDPPacket());
     }
-    private boolean isWindowFull(int nextSeqNum, int base)
+
+
+    private boolean isWindowFull(Window win)
     {
-        return !(nextSeqNum < base + TCPSocketImpl.windowSize);
+        return !(win.nextSeqNum < win.base + win.cwnd);
     }
 
     private void changeStateToSynSending(){
@@ -358,8 +361,8 @@ public class TCPSocketImpl extends TCPSocket {
         TCPPacket receivedPacket = null;
         this.receiverState = receiverStates.RECEIVE;
         this.udp.setSoTimeout(Integer.MAX_VALUE);
-        while(true){
-            System.out.println(this.receiverState);
+        boolean sending = true;
+        while(sending){
             switch (receiverState){
                 case RECEIVE:
                     receivedPacket = goBackNReceive();
@@ -372,6 +375,10 @@ public class TCPSocketImpl extends TCPSocket {
                     break;
                 case SEND_ACK:
                     receiverSendAck();
+                    break;
+                case CLOSE:
+                    this.socketState = socketStates.CLOSE;
+                    sending = false;
                     break;
             }
         }
@@ -415,7 +422,6 @@ public class TCPSocketImpl extends TCPSocket {
     }
 
     private void printToFile(TCPPacket receivedPacket , String pathToFile) {
-        //TODO: CHANGE TO BYTE FILE
         try {
             OutputStream os = new FileOutputStream(new File(pathToFile), true);
             os.write(receivedPacket.getData());
@@ -434,6 +440,11 @@ public class TCPSocketImpl extends TCPSocket {
             DatagramPacket data = new DatagramPacket(buff, buff.length);
             this.udp.receive(data);
             TCPPacket receivedPacket = new TCPPacket(data);
+            if(receivedPacket.isFIN())
+            {
+                receiverState = receiverStates.CLOSE;
+                return null;
+            }
             if(receivedPacket.getAckFlag() || receivedPacket.getSynFlag())
                 return null;
             if(receivedPacket.getSquenceNumber() == this.expectedSequenceNumber){
@@ -454,7 +465,7 @@ public class TCPSocketImpl extends TCPSocket {
 
     @Override
     public void close() throws Exception {
-        throw new RuntimeException("Not implemented!");
+        this.udp.close();
     }
 
     @Override
