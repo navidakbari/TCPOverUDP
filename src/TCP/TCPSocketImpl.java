@@ -4,6 +4,7 @@ import tools.Log;
 
 import java.io.*;
 import java.net.DatagramPacket;
+import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.HashMap;
@@ -34,6 +35,7 @@ public class TCPSocketImpl extends TCPSocket {
     private socketStates socketState;
     private senderStates senderState;
     private int lastAcked = Integer.MAX_VALUE;
+    private int cwndCounter = 0;
 
     public static final int chunkSize = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 20;
     public static int windowSize = 10;
@@ -119,36 +121,76 @@ public class TCPSocketImpl extends TCPSocket {
                     slowStart(win, timer);
                     break;
                 case FAST_RECOVERY:
-                    fastRecovery();
+                    fastRecovery(win, timer);
                     break;
                 case CONGESTION_AVOIDANCE:
-                    congetionAvoidance();
+                    congestionAvoidance(win, timer);
                     break;
             }
         }
     }
 
-    private void fastRecovery() throws IOException {
+    private void fastRecovery(Window win, SocketTimer timer) throws IOException {
         byte[] buff = new byte[1408];
         DatagramPacket data = new DatagramPacket(buff, buff.length);
         this.udp.receive(data);
         TCPPacket receivedPacket = new TCPPacket(data);
-        if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
 
+        if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
+            if(lastAcked == receivedPacket.getAcknowledgmentNumber()){
+                win.cwnd += 1;
+            }
+            else if(receivedPacket.getAcknowledgmentNumber() >= win.base){
+                win.cwnd = win.sshtresh;
+                win.dupAckCount = 0;
+                moveBase(win, timer, receivedPacket);
+            }
+        }
+
+    }
+    private void handleDupAck(Window win) {
+        win.dupAckCount++;
+        if(win.dupAckCount == 3) {
+            win.sshtresh = win.cwnd/2;
+            win.cwnd = win.sshtresh + 3;
+            win.congestionState = Window.congestionStates.FAST_RECOVERY;
+            try {
+                this.udp.send(win.packets.get(win.base).getUDPPacket());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
-
-    private void congetionAvoidance() throws IOException {
+    private void moveBase(Window win, SocketTimer timer, TCPPacket receivedPacket){
+        win.base = receivedPacket.getAcknowledgmentNumber() + 1;
+        if (win.base == win.nextSeqNum) {
+            timer.stop();
+            this.senderState = senderStates.FINISH_SEND;
+        }
+        else {
+            timer.restart();
+            this.senderState = senderStates.SEND;
+        }
+        lastAcked = receivedPacket.getAcknowledgmentNumber();
+    }
+    private void congestionAvoidance(Window win, SocketTimer timer) throws IOException {
         byte[] buff = new byte[1408];
         DatagramPacket data = new DatagramPacket(buff, buff.length);
         this.udp.receive(data);
         TCPPacket receivedPacket = new TCPPacket(data);
-        if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
 
+        if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
+            if(lastAcked == receivedPacket.getAcknowledgmentNumber()){
+               handleDupAck(win);
+            }
+            else if(receivedPacket.getAcknowledgmentNumber() >= win.base){
+                win.cwnd = ((++cwndCounter) % win.cwnd  ==  0) ? win.cwnd + 1 : win.cwnd;
+                win.dupAckCount = 0;
+                moveBase(win, timer, receivedPacket);
+            }
         }
 
     }
-
     private void slowStart(Window win, SocketTimer timer) throws IOException {
         byte[] buff = new byte[1408];
         DatagramPacket data = new DatagramPacket(buff, buff.length);
@@ -157,27 +199,12 @@ public class TCPSocketImpl extends TCPSocket {
 
         if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
             if(lastAcked == receivedPacket.getAcknowledgmentNumber()){
-                win.dupAckCount++;
-                if(win.dupAckCount == 3)
-                    win.congestionState = Window.congestionStates.FAST_RECOVERY;
-
+                handleDupAck(win);
             }
             else if(receivedPacket.getAcknowledgmentNumber() >= win.base){
                 win.cwnd++;
                 win.dupAckCount = 0;
-                win.base = receivedPacket.getAcknowledgmentNumber() + 1;
-                if (win.base == win.nextSeqNum) {
-                    timer.stop();
-                    this.senderState = senderStates.FINISH_SEND;
-                }
-                else {
-                    timer.restart();
-                    this.senderState = senderStates.SEND;
-                }
-                lastAcked = receivedPacket.getAcknowledgmentNumber();
-                if(win.cwnd >= win.sshtresh){
-                    win.congestionState = Window.congestionStates.CONGESTION_AVOIDANCE;
-                }
+                moveBase(win, timer, receivedPacket);
             }
         }
     }
