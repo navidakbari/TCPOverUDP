@@ -30,6 +30,7 @@ public class SocketTimer {
     }
 
 }
+
 class SocketTimerTask extends TimerTask{
     private Window window;
     private EnhancedDatagramSocket udp;
@@ -40,6 +41,10 @@ class SocketTimerTask extends TimerTask{
     }
     public void run()
     {
+        window.sshtresh = window.cwnd/2;
+        window.cwnd = 1;
+        window.dupAckCount = 0;
+        window.congestionState = Window.congestionStates.SLOW_START;
         for( int i = window.base ; i < window.nextSeqNum ; i++)
         {
             try {
