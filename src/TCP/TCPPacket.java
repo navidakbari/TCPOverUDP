@@ -11,6 +11,7 @@ public class TCPPacket {
     private int acknowledgmentNumber;
     private boolean SYN;
     private boolean ACK;
+    private boolean FIN;
     private int destinationPort;
     private String destinationIp;
     private int dataLength;
@@ -25,6 +26,7 @@ public class TCPPacket {
         this.SYN = SYN;
         this.data = data;
         this.dataLength = data.length;
+        this.FIN = false;
     }
 
     TCPPacket(DatagramPacket dp) {
@@ -35,7 +37,8 @@ public class TCPPacket {
          this.dataLength = byteToInt(8, buff);
          this.ACK = byteToBool(12 , buff);
          this.SYN = byteToBool(13 , buff);
-         this.data = Arrays.copyOfRange(buff, 14, this.dataLength + 14);
+         this.FIN = byteToBool(14, buff);
+         this.data = Arrays.copyOfRange(buff, 15, this.dataLength + 15);
     }
 
     private boolean byteToBool(int index, byte[] buff) {
@@ -59,7 +62,8 @@ public class TCPPacket {
         intToBytes(this.dataLength , 8, packet);
         boolToByte(this.ACK , 12 , packet);
         boolToByte(this.SYN , 13 , packet);
-        injectBytes(packet, 14 , data);
+        boolToByte(this.FIN, 14, packet);
+        injectBytes(packet, 15 , data);
         return packet;
     }
 

@@ -231,12 +231,25 @@ public class TCPSocketImpl extends TCPSocket {
                 win.nextSeqNum ++;
             }
             else{
-                this.senderState = senderStates.RECEIVE_ACK;
+                if(chunkMaker.hasRemainingChunk(win.nextSeqNum))
+                    this.senderState = senderStates.RECEIVE_ACK;
+//                else
+//                    this.sendFin(destinationIp, destinationPort);
                 break;
             }
         }
     }
-
+    private void sendFin(String destinationIp, int destinationPort) throws IOException {
+        TCPPacket sendPacket = new TCPPacket(
+                destinationIp,
+                destinationPort,
+                sequenceNumber,
+                0,
+                false,
+                false,
+                new byte[0]);
+        this.udp.send(sendPacket.getUDPPacket());
+    }
     private boolean isWindowFull(int nextSeqNum, int base)
     {
         return !(nextSeqNum < base + TCPSocketImpl.windowSize);
