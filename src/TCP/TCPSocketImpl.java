@@ -1,10 +1,11 @@
 import config.Config;
 import tools.ChunkMaker;
 import tools.Log;
-
-import java.io.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.net.DatagramPacket;
-import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.HashMap;
@@ -38,7 +39,7 @@ public class TCPSocketImpl extends TCPSocket {
     private int cwndCounter = 0;
 
     public static final int chunkSize = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 20;
-    public static int windowSize = 10;
+
     private receiverStates receiverState;
 
     public TCPSocketImpl(String ip, int port) throws Exception {
@@ -114,19 +115,16 @@ public class TCPSocketImpl extends TCPSocket {
 
     private void receiveACKs(Window win, SocketTimer timer) throws IOException
     {
-        while(true) {
-
-            switch (win.congestionState) {
-                case SLOW_START:
-                    slowStart(win, timer);
-                    break;
-                case FAST_RECOVERY:
-                    fastRecovery(win, timer);
-                    break;
-                case CONGESTION_AVOIDANCE:
-                    congestionAvoidance(win, timer);
-                    break;
-            }
+        switch (win.congestionState) {
+            case SLOW_START:
+                slowStart(win, timer);
+                break;
+            case FAST_RECOVERY:
+                fastRecovery(win, timer);
+                break;
+            case CONGESTION_AVOIDANCE:
+                congestionAvoidance(win, timer);
+                break;
         }
     }
 
@@ -144,6 +142,7 @@ public class TCPSocketImpl extends TCPSocket {
                 win.cwnd = win.sshtresh;
                 win.dupAckCount = 0;
                 moveBase(win, timer, receivedPacket);
+                win.congestionState = Window.congestionStates.CONGESTION_AVOIDANCE;
             }
         }
 
@@ -163,14 +162,8 @@ public class TCPSocketImpl extends TCPSocket {
     }
     private void moveBase(Window win, SocketTimer timer, TCPPacket receivedPacket){
         win.base = receivedPacket.getAcknowledgmentNumber() + 1;
-        if (win.base == win.nextSeqNum) {
-            timer.stop();
-            this.senderState = senderStates.FINISH_SEND;
-        }
-        else {
-            timer.restart();
-            this.senderState = senderStates.SEND;
-        }
+        timer.restart();
+        this.senderState = senderStates.SEND;
         lastAcked = receivedPacket.getAcknowledgmentNumber();
     }
     private void congestionAvoidance(Window win, SocketTimer timer) throws IOException {
@@ -213,7 +206,7 @@ public class TCPSocketImpl extends TCPSocket {
     {
         while (true)
         {
-            if(!isWindowFull(win.nextSeqNum, win.base) &&
+            if(!isWindowFull(win) &&
                     chunkMaker.hasRemainingChunk(win.nextSeqNum))
             {
                 win.packets.put(win.nextSeqNum,  new TCPPacket(
@@ -237,9 +230,9 @@ public class TCPSocketImpl extends TCPSocket {
         }
     }
 
-    private boolean isWindowFull(int nextSeqNum, int base)
+    private boolean isWindowFull(Window win)
     {
-        return !(nextSeqNum < base + TCPSocketImpl.windowSize);
+        return !(win.nextSeqNum < win.base + win.cwnd);
     }
 
     private void changeStateToSynSending(){

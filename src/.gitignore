@@ -47,7 +47,7 @@ cmake-build-*/
 *.iws
 
 # IntelliJ
-out/
+../out/
 
 # mpeltonen/sbt-idea plugin
 .idea_modules/
@@ -111,3 +111,5 @@ hs_err_pid*
 .idea/*
 .DS_Store
 # End of https://www.gitignore.io/api/java,intellij
+Receiver/aks.png
+Receiver/result.txt
