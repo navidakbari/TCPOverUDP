@@ -240,15 +240,15 @@ public class TCPSocketImpl extends TCPSocket {
                 win.nextSeqNum ++;
             }
             else{
-                if(chunkMaker.hasRemainingChunk(win.nextSeqNum))
-                    this.senderState = senderStates.RECEIVE_ACK;
-                else {
+                if(!chunkMaker.hasRemainingChunk(win.nextSeqNum)){
                     System.out.println("finish");
                     for (int i = 0; i < 100; i++) {
                         this.sendFin(destinationIp, destinationPort);
                     }
                     this.senderState = senderStates.FINISH_SEND;
                 }
+                else
+                    this.senderState = senderStates.RECEIVE_ACK;
                 break;
             }
         }
