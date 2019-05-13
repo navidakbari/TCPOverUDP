@@ -9,7 +9,7 @@ public class Log {
     public static void handShakeSynAckSent() {System.out.println("Server sent Syn Ack...");}
     public static void handShakeAckReceived() {System.out.println("Server received Ack.");}
     public static void serverEstablished() {System.out.println("Server established successfully.");}
-    public static void SenderGoingToSendData() { System.out.println("Sender going to handshake state."); }
+    public static void SenderGoingToSendData() { System.out.println("Sender going to Go-Back-N send state."); }
     public static void changeStateToSynSending() { System.out.println("Sender change State To SynSending."); }
     public static void sendingSynToReceiver() { System.out.println("Sender Send Data to Receiver."); }
     public static void senderReceivedSynAckPacket() {  System.out.println("Sender receiving Syn Ack packet from receiver."); }

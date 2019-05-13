@@ -17,6 +17,7 @@ public class TCPServerSocketImpl extends TCPServerSocket {
     private int acknowledgmentNumber;
     private enum handshakeStates  {CLOSED,LISTEN, ACK_SENDING ,SYN_REC, ESTB};
     private handshakeStates handshakeState;
+    private int windowSize = Config.RCEIVER_BUFFER_SIZE;
 
     public TCPServerSocketImpl(int port) throws Exception {
         super(port);
@@ -92,7 +93,8 @@ public class TCPServerSocketImpl extends TCPServerSocket {
                         acknowledgmentNumber + 1,
                         true,
                         true,
-                        new byte[0]);
+                        new byte[0],
+                        windowSize);
                 this.udp.send(sendPacket.getUDPPacket());
                 Log.handShakeSynAckSent();
                 this.handshakeState = handshakeStates.SYN_REC;

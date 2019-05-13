@@ -9,6 +9,7 @@ import java.util.Arrays;
 public class TCPPacket {
     private int sequenceNumber;
     private int acknowledgmentNumber;
+    private int receiveWindow;
     private boolean SYN;
     private boolean ACK;
     private boolean FIN;
@@ -29,6 +30,17 @@ public class TCPPacket {
         this.FIN = false;
     }
 
+    public TCPPacket(String destinationIp , int destinationPort , int sequenceNumber, int acknowledgmentNumber,boolean ACK , boolean SYN , byte[] data, int receiveWindow) {
+        this.sequenceNumber = sequenceNumber;
+        this.acknowledgmentNumber = acknowledgmentNumber;
+        this.receiveWindow = receiveWindow;
+        this.SYN = SYN;
+        this.ACK = ACK;
+        this.destinationPort = destinationPort;
+        this.destinationIp = destinationIp;
+        this.data = data;
+    }
+
     TCPPacket(DatagramPacket dp) {
          this.destinationPort = dp.getPort();
          byte[] buff = dp.getData();
@@ -38,7 +50,8 @@ public class TCPPacket {
          this.ACK = byteToBool(12 , buff);
          this.SYN = byteToBool(13 , buff);
          this.FIN = byteToBool(14, buff);
-         this.data = Arrays.copyOfRange(buff, 15, this.dataLength + 15);
+         this.receiveWindow = byteToInt(15 , buff);
+         this.data = Arrays.copyOfRange(buff, 19, this.dataLength + 19);
     }
 
     private boolean byteToBool(int index, byte[] buff) {
@@ -63,7 +76,8 @@ public class TCPPacket {
         boolToByte(this.ACK , 12 , packet);
         boolToByte(this.SYN , 13 , packet);
         boolToByte(this.FIN, 14, packet);
-        injectBytes(packet, 15 , data);
+        intToBytes(this.receiveWindow , 15 , packet);
+        injectBytes(packet, 19 , data);
         return packet;
     }
 
@@ -124,4 +138,5 @@ public class TCPPacket {
         return acknowledgmentNumber;
     }
 
+    public int getReceiveWindow() { return receiveWindow; }
 }
