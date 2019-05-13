@@ -92,10 +92,8 @@ public class TCPSocketImpl extends TCPSocket {
     {
         win.base = sequenceNumber ;
         win.nextSeqNum = sequenceNumber;
-        onWindowChange();
         win.cwnd = 1;
-        win.sshtresh = 64;
-        onWindowChange();
+        win.sshtresh = 24;
         win.dupAckCount = 0;
         ChunkMaker chunkMaker = new ChunkMaker(pathToFile, chunkSize, win.base);
         this.udp.setSoTimeout(Integer.MAX_VALUE);
@@ -140,7 +138,6 @@ public class TCPSocketImpl extends TCPSocket {
                 fastRecovery(receivedPacket);
                 break;
             case CONGESTION_AVOIDANCE:
-                cwndCounter = 0;
                 congestionAvoidance(receivedPacket);
                 break;
         }
@@ -157,6 +154,7 @@ public class TCPSocketImpl extends TCPSocket {
                 onWindowChange();
                 win.dupAckCount = 0;
                 moveBase(receivedPacket);
+                cwndCounter = 0;
                 win.congestionState = Window.congestionStates.CONGESTION_AVOIDANCE;
             }
         }
@@ -193,9 +191,9 @@ public class TCPSocketImpl extends TCPSocket {
                 if((++cwndCounter) == win.cwnd)
                 {
                     win.cwnd ++;
+                    onWindowChange();
                     cwndCounter = 0;
                 }
-                onWindowChange();
                 win.dupAckCount = 0;
                 moveBase(receivedPacket);
             }
@@ -212,8 +210,10 @@ public class TCPSocketImpl extends TCPSocket {
                 onWindowChange();
                 win.dupAckCount = 0;
                 moveBase(receivedPacket);
-                if(win.cwnd > win.sshtresh)
+                if(win.cwnd > win.sshtresh) {
                     win.congestionState = Window.congestionStates.CONGESTION_AVOIDANCE;
+                    cwndCounter = 0;
+                }
             }
         }
     }
