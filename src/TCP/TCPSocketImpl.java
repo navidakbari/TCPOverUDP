@@ -82,6 +82,7 @@ public class TCPSocketImpl extends TCPSocket {
                     break;
                 case CLOSE:
                     sending = false;
+                    saveCongestionWindowPlot();
                     break;
             }
         }
@@ -99,6 +100,7 @@ public class TCPSocketImpl extends TCPSocket {
         ChunkMaker chunkMaker = new ChunkMaker(pathToFile, chunkSize, win.base);
         this.udp.setSoTimeout(Integer.MAX_VALUE);
         timer = new SocketTimer(win, this.udp);
+        timer.start();
         win.congestionState = Window.congestionStates.SLOW_START;
 
         boolean sending = true;
@@ -115,6 +117,7 @@ public class TCPSocketImpl extends TCPSocket {
                 case FINISH_SEND:
                     sending = false;
                     System.out.println("FINIIIIIIIIISH");
+                    timer.finish();
                     socketState = socketStates.CLOSE;
                     break;
             }
@@ -123,31 +126,34 @@ public class TCPSocketImpl extends TCPSocket {
 
     private void receiveACKs() throws IOException
     {
-        switch (win.congestionState) {
-            case SLOW_START:
-                slowStart();
-                break;
-            case FAST_RECOVERY:
-                fastRecovery();
-                break;
-            case CONGESTION_AVOIDANCE:
-                congestionAvoidance();
-                break;
-        }
-    }
-
-    private void fastRecovery() throws IOException {
         byte[] buff = new byte[1408];
         DatagramPacket data = new DatagramPacket(buff, buff.length);
         this.udp.receive(data);
         TCPPacket receivedPacket = new TCPPacket(data);
+
+        System.out.println(win.congestionState);
+        switch (win.congestionState) {
+            case SLOW_START:
+                slowStart(receivedPacket);
+                break;
+            case FAST_RECOVERY:
+                fastRecovery(receivedPacket);
+                break;
+            case CONGESTION_AVOIDANCE:
+                cwndCounter = 0;
+                congestionAvoidance(receivedPacket);
+                break;
+        }
+    }
+
+    private void fastRecovery(TCPPacket receivedPacket) throws IOException {
         if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
             if(lastAcked == receivedPacket.getAcknowledgmentNumber()){
                 win.cwnd += 1;
                 onWindowChange();
             }
             else if(receivedPacket.getAcknowledgmentNumber() >= win.base){
-                win.cwnd = win.sshtresh;
+                win.cwnd = win.sshtresh != 0 ? win.sshtresh : 1;
                 onWindowChange();
                 win.dupAckCount = 0;
                 moveBase(receivedPacket);
@@ -178,17 +184,17 @@ public class TCPSocketImpl extends TCPSocket {
         lastAcked = receivedPacket.getAcknowledgmentNumber();
     }
 
-    private void congestionAvoidance() throws IOException {
-        byte[] buff = new byte[1408];
-        DatagramPacket data = new DatagramPacket(buff, buff.length);
-        this.udp.receive(data);
-        TCPPacket receivedPacket = new TCPPacket(data);
+    private void congestionAvoidance(TCPPacket receivedPacket) throws IOException {
         if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
             if(lastAcked == receivedPacket.getAcknowledgmentNumber()){
                handleDupAck();
             }
             else if(receivedPacket.getAcknowledgmentNumber() >= win.base){
-                win.cwnd = ((++cwndCounter) % win.cwnd  ==  0) ? win.cwnd + 1 : win.cwnd;
+                if((++cwndCounter) == win.cwnd)
+                {
+                    win.cwnd ++;
+                    cwndCounter = 0;
+                }
                 onWindowChange();
                 win.dupAckCount = 0;
                 moveBase(receivedPacket);
@@ -196,11 +202,7 @@ public class TCPSocketImpl extends TCPSocket {
         }
 
     }
-    private void slowStart() throws IOException {
-        byte[] buff = new byte[1408];
-        DatagramPacket data = new DatagramPacket(buff, buff.length);
-        this.udp.receive(data);
-        TCPPacket receivedPacket = new TCPPacket(data);
+    private void slowStart(TCPPacket receivedPacket) throws IOException {
         if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
             if(lastAcked == receivedPacket.getAcknowledgmentNumber()){
                 handleDupAck();
@@ -210,6 +212,8 @@ public class TCPSocketImpl extends TCPSocket {
                 onWindowChange();
                 win.dupAckCount = 0;
                 moveBase(receivedPacket);
+                if(win.cwnd > win.sshtresh)
+                    win.congestionState = Window.congestionStates.CONGESTION_AVOIDANCE;
             }
         }
     }
@@ -232,18 +236,18 @@ public class TCPSocketImpl extends TCPSocket {
                 udp.send(win.packets.get(win.nextSeqNum).getUDPPacket());
                 System.out.println("data with sent with seq : " + win.nextSeqNum);
                 if(win.base == win.nextSeqNum)
-                    timer.start();
+                    timer.restart();
                 win.nextSeqNum ++;
             }
             else{
                 if(chunkMaker.hasRemainingChunk(win.nextSeqNum))
                     this.senderState = senderStates.RECEIVE_ACK;
                 else {
+                    System.out.println("finish");
                     for (int i = 0; i < 100; i++) {
                         this.sendFin(destinationIp, destinationPort);
                     }
                     this.senderState = senderStates.FINISH_SEND;
-                    timer.stop();
                 }
                 break;
             }

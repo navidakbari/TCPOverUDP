@@ -113,3 +113,18 @@ hs_err_pid*
 # End of https://www.gitignore.io/api/java,intellij
 Receiver/aks.png
 Receiver/result.txt
+../.DS_Store
+../.idea/
+../BytesPerTime [Mon May 13 12-09-59 IRDT 2019].png
+../BytesPerTime [Mon May 13 12-10-03 IRDT 2019].png
+../CongestionWindow [Mon May 13 12-09-59 IRDT 2019].png
+../out/
+Receiver/c.ppt
+Receiver/file.txt
+Sender/c.ppt
+../.DS_Store
+../.idea/
+../BytesPerTime [Mon May 13 12-09-59 IRDT 2019].png
+../BytesPerTime [Mon May 13 12-10-03 IRDT 2019].png
+../CongestionWindow [Mon May 13 12-09-59 IRDT 2019].png
+../out/

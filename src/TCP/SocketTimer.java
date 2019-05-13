@@ -4,8 +4,9 @@ import java.util.TimerTask;
 
 public class SocketTimer {
     private static final int DELAY = 50;
-    private static final int PERIOD = 50;
+    private static final int PERIOD = 100;
 
+    private int startNum = 0;
     private Timer timer;
     private Window window;
     private EnhancedDatagramSocket udp;
@@ -18,11 +19,18 @@ public class SocketTimer {
     public void start() {
         timer = new Timer();
         timer.schedule(new SocketTimerTask(window, udp), DELAY, PERIOD);
+        startNum ++;
     }
 
     public void stop() {
         timer.cancel();
+        timer.purge();
     }
+
+    public void finish() {
+        this.stop();
+    }
+
 
     public void restart() {
         stop();
