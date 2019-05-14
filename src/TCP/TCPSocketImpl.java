@@ -47,7 +47,7 @@ public class TCPSocketImpl extends TCPSocket {
     private final int receiverWindow = Config.RCEIVER_BUFFER_SIZE;
     private int rwnd;
     private Timer timer;
-    public static final int chunkSize = 1408-20;
+    public static final int chunkSize = 100;
     private byte[] cumulativeData = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 20];
     private int cumulativeDataIndex = 0;
     private int nextCumulativeSeqNum = 0;
@@ -260,8 +260,9 @@ public class TCPSocketImpl extends TCPSocket {
                 !chunkMaker.hasRemainingChunk(win.nextSeqNum + 1)
             ){
                 this.sendType = sendTypes.NORMAL;
-            }else if(chunkMaker.hasRemainingChunk(nextCumulativeSeqNum)&&
-                    !dataHasEnoughSize(chunkMaker.getChunk(win.nextSeqNum))
+            }else if((chunkMaker.hasRemainingChunk(nextCumulativeSeqNum)&&
+                    !dataHasEnoughSize(chunkMaker.getChunk(win.nextSeqNum))) ||
+                    !chunkMaker.hasRemainingChunk(nextCumulativeSeqNum + 1)
             ){
                 this.sendType = sendTypes.NAGLE;
             }
@@ -279,7 +280,10 @@ public class TCPSocketImpl extends TCPSocket {
     private void nagleSeding(ChunkMaker chunkMaker, String destinationIp, int destinationPort) throws IOException {
         while (true) {
             if (!isWindowFull() &&
-                    hasReceiverEnoughSize()) {
+                chunkMaker.hasRemainingChunk(nextCumulativeSeqNum) &&
+                hasReceiverEnoughSize()
+            ) {
+                System.out.println("cum: " + cumulativeDataIndex);
                 System.arraycopy(chunkMaker.getChunk(nextCumulativeSeqNum), 0, cumulativeData, cumulativeDataIndex, chunkMaker.getChunk(nextCumulativeSeqNum).length);
                 cumulativeDataIndex += chunkMaker.getChunk(nextCumulativeSeqNum).length;
                 nextCumulativeSeqNum++;
@@ -298,19 +302,19 @@ public class TCPSocketImpl extends TCPSocket {
                     win.nextSeqNum++;
                     Arrays.fill(cumulativeData, (byte) 0);
                     cumulativeDataIndex = 0;
-                }else {
-                    System.out.println("Can not Send " + win.nextSeqNum + " " + win.base);
-                    if ((!chunkMaker.hasRemainingChunk(win.nextSeqNum)
-                            && lastAcked == (win.nextSeqNum - 1))) {
-                        System.out.println("finish");
-                        for (int i = 0; i < 100; i++) {
-                            this.sendFin(destinationIp, destinationPort);
-                        }
-                        this.senderState = senderStates.FINISH_SEND;
-                    } else
-                        this.senderState = senderStates.RECEIVE_ACK;
-                    break;
                 }
+            }else {
+                System.out.println("Can not Send " + win.nextSeqNum + " " + win.base);
+                if ((!chunkMaker.hasRemainingChunk(nextCumulativeSeqNum)
+                        && lastAcked == (win.nextSeqNum - 1))) {
+                    System.out.println("finish");
+                    for (int i = 0; i < 100; i++) {
+                        this.sendFin(destinationIp, destinationPort);
+                    }
+                    this.senderState = senderStates.FINISH_SEND;
+                } else
+                    this.senderState = senderStates.RECEIVE_ACK;
+                break;
             }
         }
     }
