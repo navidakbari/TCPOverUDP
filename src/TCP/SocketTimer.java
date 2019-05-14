@@ -3,11 +3,11 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 public class SocketTimer {
-    private static final int DELAY = 500;
+    private static final int DELAY = 10;
     private static final int PERIOD = 100;
 
-    private int startNum = 0;
-    private Timer timer;
+    public static int startNum = 0;
+    public static Timer timer;
     private Window window;
     private EnhancedDatagramSocket udp;
 
@@ -17,14 +17,19 @@ public class SocketTimer {
     }
 
     public void start() {
-        timer = new Timer();
-        timer.schedule(new SocketTimerTask(window, udp), DELAY, PERIOD);
+        SocketTimer.timer = new Timer();
+        SocketTimer.timer.schedule(new SocketTimerTask(window, udp), DELAY, PERIOD);
         startNum ++;
     }
 
     public void stop() {
-        timer.cancel();
-        timer.purge();
+        if(timer != null) {
+            System.out.println(startNum);
+            timer.cancel();
+            startNum --;
+            timer.purge();
+            timer = null;
+        }
     }
 
     public void finish() {
@@ -33,6 +38,7 @@ public class SocketTimer {
 
 
     public void restart() {
+        System.out.println("timer restart");
         stop();
         start();
     }
@@ -53,14 +59,14 @@ class SocketTimerTask extends TimerTask{
         window.cwnd = 1;
         window.dupAckCount = 0;
         window.congestionState = Window.congestionStates.SLOW_START;
-        for( int i = window.base ; i < window.nextSeqNum ; i++)
-        {
+//        for( int i = window.base ; i < window.nextSeqNum ; i++)
+//        {
             try {
-                this.udp.send(window.packets.get(i).getUDPPacket());
-                System.out.println("timeout packet send : " + (i));
+                this.udp.send(window.packets.get(window.base).getUDPPacket());
+                System.out.println("timeout packet send : " + (window.base));
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        }
+//        }
     }
 }

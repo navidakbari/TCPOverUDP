@@ -10,6 +10,7 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.HashMap;
 import java.util.Random;
+import java.util.Timer;
 
 class Window
 {
@@ -32,6 +33,7 @@ public class TCPSocketImpl extends TCPSocket {
     private enum socketStates {IDEAL , HAND_SHAKE, GO_BACK_N_SEND, GO_BACK_N_RECEIVE, CLOSE};
     private enum receiverStates {RECEIVE, WRITE_TO_FILE, SEND_ACK, SEND_DUP_ACK, CLOSE};
     private enum senderStates {SEND, RECEIVE_ACK, FINISH_SEND}
+    private static final int TIMER_PERIOD = 30;
     private handShakeStates handShakeState;
     private socketStates socketState;
     private senderStates senderState;
@@ -39,9 +41,9 @@ public class TCPSocketImpl extends TCPSocket {
     private int lastAcked = Integer.MAX_VALUE;
     private int cwndCounter = 0;
     private Window win = new Window();
-    private SocketTimer timer;
     private final int receiverWindow = Config.RCEIVER_BUFFER_SIZE;
     private int rwnd;
+    private Timer timer;
 
     public static final int chunkSize = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 20;
 
@@ -88,7 +90,24 @@ public class TCPSocketImpl extends TCPSocket {
             }
         }
     }
-
+    private void restartTimer()
+    {
+        if(timer != null)
+        {
+            timer.cancel();
+            timer.purge();
+        }
+        timer = new Timer();
+        timer.schedule(new SocketTimerTask(win, udp), TIMER_PERIOD, TIMER_PERIOD);
+    }
+    private void finishTimer()
+    {
+        if(timer != null)
+        {
+            timer.cancel();
+            timer.purge();
+        }
+    }
     private void goBackNSend(String pathToFile, String destinationIp, int destinationPort) throws IOException {
         win.base = sequenceNumber ;
         win.nextSeqNum = sequenceNumber;
@@ -97,8 +116,6 @@ public class TCPSocketImpl extends TCPSocket {
         win.dupAckCount = 0;
         ChunkMaker chunkMaker = new ChunkMaker(pathToFile, chunkSize, win.base);
         this.udp.setSoTimeout(Integer.MAX_VALUE);
-        timer = new SocketTimer(win, this.udp);
-        timer.start();
         win.congestionState = Window.congestionStates.SLOW_START;
 
         boolean sending = true;
@@ -115,7 +132,7 @@ public class TCPSocketImpl extends TCPSocket {
                 case FINISH_SEND:
                     sending = false;
                     System.out.println("FINIIIIIIIIISH");
-                    timer.finish();
+                    finishTimer();
                     socketState = socketStates.CLOSE;
                     break;
             }
@@ -130,7 +147,7 @@ public class TCPSocketImpl extends TCPSocket {
         rwnd = receivedPacket.getReceiveWindow();
         System.out.println("sender get ack number: " + receivedPacket.getAcknowledgmentNumber());
 
-        System.out.println(win.congestionState);
+        System.out.println(win.congestionState + "with window " + win.cwnd);
         switch (win.congestionState) {
             case SLOW_START:
                 slowStart(receivedPacket);
@@ -148,7 +165,6 @@ public class TCPSocketImpl extends TCPSocket {
         if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
             if(lastAcked == receivedPacket.getAcknowledgmentNumber()){
                 win.cwnd += 1;
-
                 onWindowChange();
             }
             else if(receivedPacket.getAcknowledgmentNumber() >= win.base){
@@ -180,7 +196,7 @@ public class TCPSocketImpl extends TCPSocket {
 
     private void moveBase(TCPPacket receivedPacket){
         win.base = receivedPacket.getAcknowledgmentNumber() + 1;
-        timer.restart();
+        restartTimer();
         this.senderState = senderStates.SEND;
         lastAcked = receivedPacket.getAcknowledgmentNumber();
     }
@@ -239,8 +255,9 @@ public class TCPSocketImpl extends TCPSocket {
                         chunkMaker.getChunk(win.nextSeqNum)));
                 udp.send(win.packets.get(win.nextSeqNum).getUDPPacket());
                 System.out.println("data sent with seq : " + win.nextSeqNum);
-                if(win.base == win.nextSeqNum)
-                    timer.restart();
+                if(win.base == win.nextSeqNum) {
+                    restartTimer();
+                }
                 win.nextSeqNum ++;
             }
             else{
