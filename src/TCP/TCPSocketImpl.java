@@ -33,19 +33,21 @@ public class TCPSocketImpl extends TCPSocket {
     private enum handShakeStates {CLOSED , SYN_SENDING ,SYN_SENT , SENDING_ACK , ESTAB};
     private enum socketStates {IDEAL , HAND_SHAKE, GO_BACK_N_SEND, GO_BACK_N_RECEIVE, CLOSE};
     private enum receiverStates {RECEIVE, WRITE_TO_FILE, SEND_ACK, SEND_DUP_ACK, CLOSE};
-    private enum senderStates {SEND, RECEIVE_ACK, FINISH_SEND}
-    private static final int TIMER_PERIOD = 100;
+    private enum senderStates {SEND, RECEIVE_ACK, FINISH_SEND};
+    private enum sendTypes{NORMAL , NAGLE};
     private handShakeStates handShakeState;
     private socketStates socketState;
     private senderStates senderState;
     private receiverStates receiverState;
+    private sendTypes sendType;
+    private static final int TIMER_PERIOD = 100;
     private int lastAcked = Integer.MAX_VALUE;
     private int cwndCounter = 0;
     private Window win = new Window();
     private final int receiverWindow = Config.RCEIVER_BUFFER_SIZE;
     private int rwnd;
     private Timer timer;
-    public static final int chunkSize = 100;
+    public static final int chunkSize = 1408-20;
     private byte[] cumulativeData = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 20];
     private int cumulativeDataIndex = 0;
     private int nextCumulativeSeqNum = 0;
@@ -253,39 +255,39 @@ public class TCPSocketImpl extends TCPSocket {
     }
 
     private void sendPackets(ChunkMaker chunkMaker, String destinationIp, int destinationPort) throws IOException {
-        while (true)
-        {
-            if((!isWindowFull() &&
-                dataHasEnoughSize(chunkMaker.getChunk(win.nextSeqNum)) &&
-                chunkMaker.hasRemainingChunk(win.nextSeqNum) &&
-                hasReceiverEnoughSize()))
-            {
-                win.packets.put(win.nextSeqNum,  new TCPPacket(
-                        destinationIp,
-                        destinationPort,
-                        win.nextSeqNum ,
-                        0,
-                        false,
-                        false,
-                        chunkMaker.getChunk(win.nextSeqNum).length,
-                        chunkMaker.getChunk(win.nextSeqNum)));
-                udp.send(win.packets.get(win.nextSeqNum).getUDPPacket());
-                System.out.println("data sent with seq : " + win.nextSeqNum);
-                win.nextSeqNum ++;
-            }else if(!isWindowFull() &&
-                    !dataHasEnoughSize(chunkMaker.getChunk(win.nextSeqNum)) &&
-                    chunkMaker.hasRemainingChunk(nextCumulativeSeqNum) &&
-                    hasReceiverEnoughSize())
-            {
-                System.out.println("$$$$$$$$: " + cumulativeData.length);
-                System.arraycopy(chunkMaker.getChunk(nextCumulativeSeqNum), 0, cumulativeData, cumulativeDataIndex , chunkMaker.getChunk(nextCumulativeSeqNum).length );
+            if((chunkMaker.hasRemainingChunk(win.nextSeqNum) &&
+                dataHasEnoughSize(chunkMaker.getChunk(win.nextSeqNum))) ||
+                !chunkMaker.hasRemainingChunk(win.nextSeqNum + 1)
+            ){
+                this.sendType = sendTypes.NORMAL;
+            }else if(chunkMaker.hasRemainingChunk(nextCumulativeSeqNum)&&
+                    !dataHasEnoughSize(chunkMaker.getChunk(win.nextSeqNum))
+            ){
+                this.sendType = sendTypes.NAGLE;
+            }
+
+            switch (sendType){
+                case NAGLE:
+                    nagleSeding(chunkMaker, destinationIp, destinationPort);
+                    break;
+                case NORMAL:
+                    normalSending(chunkMaker, destinationIp, destinationPort);
+                    break;
+            }
+    }
+
+    private void nagleSeding(ChunkMaker chunkMaker, String destinationIp, int destinationPort) throws IOException {
+        while (true) {
+            if (!isWindowFull() &&
+                    hasReceiverEnoughSize()) {
+                System.arraycopy(chunkMaker.getChunk(nextCumulativeSeqNum), 0, cumulativeData, cumulativeDataIndex, chunkMaker.getChunk(nextCumulativeSeqNum).length);
                 cumulativeDataIndex += chunkMaker.getChunk(nextCumulativeSeqNum).length;
                 nextCumulativeSeqNum++;
-                if(cumulativeDataIndex >= (EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 200) || !chunkMaker.hasRemainingChunk(nextCumulativeSeqNum)){
-                    win.packets.put(win.nextSeqNum,  new TCPPacket(
+                if (cumulativeDataIndex >= (EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 200) || !chunkMaker.hasRemainingChunk(nextCumulativeSeqNum)) {
+                    win.packets.put(win.nextSeqNum, new TCPPacket(
                             destinationIp,
                             destinationPort,
-                            win.nextSeqNum ,
+                            win.nextSeqNum,
                             0,
                             false,
                             false,
@@ -294,20 +296,53 @@ public class TCPSocketImpl extends TCPSocket {
                     udp.send(win.packets.get(win.nextSeqNum).getUDPPacket());
                     System.out.println("data sent with seq : " + win.nextSeqNum);
                     win.nextSeqNum++;
-                    Arrays.fill(cumulativeData, (byte)0);
+                    Arrays.fill(cumulativeData, (byte) 0);
                     cumulativeDataIndex = 0;
+                }else {
+                    System.out.println("Can not Send " + win.nextSeqNum + " " + win.base);
+                    if ((!chunkMaker.hasRemainingChunk(win.nextSeqNum)
+                            && lastAcked == (win.nextSeqNum - 1))) {
+                        System.out.println("finish");
+                        for (int i = 0; i < 100; i++) {
+                            this.sendFin(destinationIp, destinationPort);
+                        }
+                        this.senderState = senderStates.FINISH_SEND;
+                    } else
+                        this.senderState = senderStates.RECEIVE_ACK;
+                    break;
                 }
-            } else{
+            }
+        }
+    }
+
+    private void normalSending(ChunkMaker chunkMaker, String destinationIp, int destinationPort) throws IOException {
+        while (true) {
+            if ((!isWindowFull() &&
+                    chunkMaker.hasRemainingChunk(win.nextSeqNum) &&
+                    hasReceiverEnoughSize())
+            ){
+                win.packets.put(win.nextSeqNum, new TCPPacket(
+                        destinationIp,
+                        destinationPort,
+                        win.nextSeqNum,
+                        0,
+                        false,
+                        false,
+                        chunkMaker.getChunk(win.nextSeqNum).length,
+                        chunkMaker.getChunk(win.nextSeqNum)));
+                udp.send(win.packets.get(win.nextSeqNum).getUDPPacket());
+                System.out.println("data sent with seq : " + win.nextSeqNum);
+                win.nextSeqNum++;
+            } else {
                 System.out.println("Can not Send " + win.nextSeqNum + " " + win.base);
-                if((!chunkMaker.hasRemainingChunk(win.nextSeqNum)
-                    && lastAcked == (win.nextSeqNum - 1)) || !chunkMaker.hasRemainingChunk(nextCumulativeSeqNum)){
+                if ((!chunkMaker.hasRemainingChunk(win.nextSeqNum)
+                        && lastAcked == (win.nextSeqNum - 1))) {
                     System.out.println("finish");
                     for (int i = 0; i < 100; i++) {
                         this.sendFin(destinationIp, destinationPort);
                     }
                     this.senderState = senderStates.FINISH_SEND;
-                }
-                else
+                } else
                     this.senderState = senderStates.RECEIVE_ACK;
                 break;
             }
