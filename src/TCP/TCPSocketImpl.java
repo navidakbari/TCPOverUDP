@@ -475,7 +475,7 @@ public class TCPSocketImpl extends TCPSocket {
             OutputStream os = new FileOutputStream(new File(pathToFile), true);
             while(recBuff.containsKey(this.expectedSequenceNumber))
             {
-                os.write(receivedPacket.getData());
+                os.write(recBuff.get(this.expectedSequenceNumber).getData());
                 recBuff.remove(this.expectedSequenceNumber);
                 this.acknowledgmentNumber = this.expectedSequenceNumber;
                 this.expectedSequenceNumber ++;
