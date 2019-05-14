@@ -299,7 +299,8 @@ public class TCPSocketImpl extends TCPSocket {
                 }
             } else{
                 System.out.println("Can not Send " + win.nextSeqNum + " " + win.base);
-                if(!chunkMaker.hasRemainingChunk(win.nextSeqNum) || !chunkMaker.hasRemainingChunk(nextCumulativeSeqNum)){
+                if((!chunkMaker.hasRemainingChunk(win.nextSeqNum)
+                    && lastAcked == (win.nextSeqNum - 1)) || !chunkMaker.hasRemainingChunk(nextCumulativeSeqNum)){
                     System.out.println("finish");
                     for (int i = 0; i < 100; i++) {
                         this.sendFin(destinationIp, destinationPort);
