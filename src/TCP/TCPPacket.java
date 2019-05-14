@@ -18,7 +18,7 @@ public class TCPPacket {
     private int dataLength;
     private byte[] data;
 
-    TCPPacket(String destinationIp , int destinationPort , int sequenceNumber, int acknowledgmentNumber,boolean ACK , boolean SYN , byte[] data) throws IOException {
+    TCPPacket(String destinationIp , int destinationPort , int sequenceNumber, int acknowledgmentNumber,boolean ACK , boolean SYN , int dataLength, byte[] data ) throws IOException {
         this.sequenceNumber = sequenceNumber;
         this.acknowledgmentNumber = acknowledgmentNumber;
         this.destinationPort = destinationPort;
@@ -26,7 +26,7 @@ public class TCPPacket {
         this.ACK = ACK;
         this.SYN = SYN;
         this.data = data;
-        this.dataLength = data.length;
+        this.dataLength = dataLength;
         this.FIN = false;
     }
 
@@ -111,7 +111,9 @@ public class TCPPacket {
     }
 
     public byte[] getData() {
-        return data;
+        byte[] exactData = new byte[dataLength];
+        System.arraycopy(data, 0, exactData, 0, data.length );
+        return exactData;
     }
 
     public Boolean getSynFlag(){

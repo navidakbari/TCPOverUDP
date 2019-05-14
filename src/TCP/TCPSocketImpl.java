@@ -8,6 +8,7 @@ import java.io.OutputStream;
 import java.net.DatagramPacket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.Timer;
@@ -44,8 +45,11 @@ public class TCPSocketImpl extends TCPSocket {
     private final int receiverWindow = Config.RCEIVER_BUFFER_SIZE;
     private int rwnd;
     private Timer timer;
+    public static final int chunkSize = 100;
+    private byte[] cumulativeData = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 20];
+    private int cumulativeDataIndex = 0;
+    private int nextCumulativeSeqNum = 0;
 
-    public static final int chunkSize = EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 20;
 
     public TCPSocketImpl(String ip, int port) throws Exception {
         super(ip, port);
@@ -111,6 +115,7 @@ public class TCPSocketImpl extends TCPSocket {
     private void goBackNSend(String pathToFile, String destinationIp, int destinationPort) throws IOException {
         win.base = sequenceNumber ;
         win.nextSeqNum = sequenceNumber;
+        nextCumulativeSeqNum = sequenceNumber;
         lastAcked = sequenceNumber - 1;
         win.cwnd = 1;
         win.sshtresh = 24;
@@ -250,10 +255,10 @@ public class TCPSocketImpl extends TCPSocket {
     private void sendPackets(ChunkMaker chunkMaker, String destinationIp, int destinationPort) throws IOException {
         while (true)
         {
-            if(!isWindowFull() &&
-                chunkMaker.hasRemainingChunk(win.nextSeqNum)
-                    && hasReceiverEnoughSize()
-                )
+            if((!isWindowFull() &&
+                dataHasEnoughSize(chunkMaker.getChunk(win.nextSeqNum)) &&
+                chunkMaker.hasRemainingChunk(win.nextSeqNum) &&
+                hasReceiverEnoughSize()))
             {
                 win.packets.put(win.nextSeqNum,  new TCPPacket(
                         destinationIp,
@@ -262,14 +267,39 @@ public class TCPSocketImpl extends TCPSocket {
                         0,
                         false,
                         false,
+                        chunkMaker.getChunk(win.nextSeqNum).length,
                         chunkMaker.getChunk(win.nextSeqNum)));
                 udp.send(win.packets.get(win.nextSeqNum).getUDPPacket());
                 System.out.println("data sent with seq : " + win.nextSeqNum);
                 win.nextSeqNum ++;
-            }
-            else{
+            }else if(!isWindowFull() &&
+                    !dataHasEnoughSize(chunkMaker.getChunk(win.nextSeqNum)) &&
+                    chunkMaker.hasRemainingChunk(nextCumulativeSeqNum) &&
+                    hasReceiverEnoughSize())
+            {
+                System.out.println("$$$$$$$$: " + cumulativeData.length);
+                System.arraycopy(chunkMaker.getChunk(nextCumulativeSeqNum), 0, cumulativeData, cumulativeDataIndex , chunkMaker.getChunk(nextCumulativeSeqNum).length );
+                cumulativeDataIndex += chunkMaker.getChunk(nextCumulativeSeqNum).length;
+                nextCumulativeSeqNum++;
+                if(cumulativeDataIndex >= (EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 200) || !chunkMaker.hasRemainingChunk(nextCumulativeSeqNum)){
+                    win.packets.put(win.nextSeqNum,  new TCPPacket(
+                            destinationIp,
+                            destinationPort,
+                            win.nextSeqNum ,
+                            0,
+                            false,
+                            false,
+                            cumulativeDataIndex,
+                            cumulativeData));
+                    udp.send(win.packets.get(win.nextSeqNum).getUDPPacket());
+                    System.out.println("data sent with seq : " + win.nextSeqNum);
+                    win.nextSeqNum++;
+                    Arrays.fill(cumulativeData, (byte)0);
+                    cumulativeDataIndex = 0;
+                }
+            } else{
                 System.out.println("Can not Send " + win.nextSeqNum + " " + win.base);
-                if(!chunkMaker.hasRemainingChunk(win.nextSeqNum)){
+                if(!chunkMaker.hasRemainingChunk(win.nextSeqNum) || !chunkMaker.hasRemainingChunk(nextCumulativeSeqNum)){
                     System.out.println("finish");
                     for (int i = 0; i < 100; i++) {
                         this.sendFin(destinationIp, destinationPort);
@@ -281,6 +311,13 @@ public class TCPSocketImpl extends TCPSocket {
                 break;
             }
         }
+    }
+
+    private boolean dataHasEnoughSize(byte[] chunk) {
+        if(chunk.length >= EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 20){
+            return true;
+        }
+        return false;
     }
 
     private boolean hasReceiverEnoughSize() {
@@ -295,6 +332,7 @@ public class TCPSocketImpl extends TCPSocket {
                 0,
                 false,
                 false,
+                0,
                 new byte[0]);
         sendPacket.setFIN(true);
         this.udp.send(sendPacket.getUDPPacket());
@@ -320,6 +358,7 @@ public class TCPSocketImpl extends TCPSocket {
                         0,
                         false,
                         true,
+                        0,
                         new byte[0]);
                 this.udp.send(sendPacket.getUDPPacket());
                 this.handShakeState = handShakeStates.SYN_SENT;
@@ -359,7 +398,7 @@ public class TCPSocketImpl extends TCPSocket {
         while (true) {
             try {
                 for (int i = 0 ; i < Config.ACK_SENDIG_LIMIT_NUMBER ; i++) {
-                    TCPPacket sendPacket = new TCPPacket(destinationIp, destinationPort, sequenceNumber, acknowledgmentNumber + 1, true, false, new byte[0]);
+                    TCPPacket sendPacket = new TCPPacket(destinationIp, destinationPort, sequenceNumber, acknowledgmentNumber + 1, true, false, 0, new byte[0]);
                     this.udp.send(sendPacket.getUDPPacket());
                 }
                 Log.senderSendAckToReceiver();

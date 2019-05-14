@@ -24,10 +24,12 @@ public class ChunkMaker {
             Log.errorInReadingFile();
         }
     }
+
     public boolean hasRemainingChunk(int seqNum)
     {
         return (( seqNum - base ) * chunkSize < data.length);
     }
+
     public byte[] getChunk(int seqNum)
     {
         if(!hasRemainingChunk(seqNum))
