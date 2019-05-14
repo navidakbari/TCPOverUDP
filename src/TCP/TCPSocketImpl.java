@@ -33,7 +33,7 @@ public class TCPSocketImpl extends TCPSocket {
     private enum socketStates {IDEAL , HAND_SHAKE, GO_BACK_N_SEND, GO_BACK_N_RECEIVE, CLOSE};
     private enum receiverStates {RECEIVE, WRITE_TO_FILE, SEND_ACK, SEND_DUP_ACK, CLOSE};
     private enum senderStates {SEND, RECEIVE_ACK, FINISH_SEND}
-    private static final int TIMER_PERIOD = 30;
+    private static final int TIMER_PERIOD = 100;
     private handShakeStates handShakeState;
     private socketStates socketState;
     private senderStates senderState;
@@ -111,12 +111,14 @@ public class TCPSocketImpl extends TCPSocket {
     private void goBackNSend(String pathToFile, String destinationIp, int destinationPort) throws IOException {
         win.base = sequenceNumber ;
         win.nextSeqNum = sequenceNumber;
+        lastAcked = sequenceNumber - 1;
         win.cwnd = 1;
         win.sshtresh = 24;
         win.dupAckCount = 0;
         ChunkMaker chunkMaker = new ChunkMaker(pathToFile, chunkSize, win.base);
         this.udp.setSoTimeout(Integer.MAX_VALUE);
         win.congestionState = Window.congestionStates.SLOW_START;
+        restartTimer();
 
         boolean sending = true;
         while (sending)
@@ -146,8 +148,7 @@ public class TCPSocketImpl extends TCPSocket {
         TCPPacket receivedPacket = new TCPPacket(data);
         rwnd = receivedPacket.getReceiveWindow();
         System.out.println("sender get ack number: " + receivedPacket.getAcknowledgmentNumber());
-
-        System.out.println(win.congestionState + "with window " + win.cwnd);
+        System.out.println(win.congestionState + " with window " + win.cwnd + " and base " + win.base);
         switch (win.congestionState) {
             case SLOW_START:
                 slowStart(receivedPacket);
@@ -160,12 +161,21 @@ public class TCPSocketImpl extends TCPSocket {
                 break;
         }
     }
-
+    private void retransmitMissingSegment(){
+        try {
+            this.udp.send(win.packets.get(win.base).getUDPPacket());
+            System.out.println("retransmit packet : " + (win.base));
+            restartTimer();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
     private void fastRecovery(TCPPacket receivedPacket) throws IOException {
         if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
             if(lastAcked == receivedPacket.getAcknowledgmentNumber()){
                 win.cwnd += 1;
                 onWindowChange();
+                this.senderState = senderStates.SEND;
             }
             else if(receivedPacket.getAcknowledgmentNumber() >= win.base){
                 win.cwnd = win.sshtresh != 0 ? win.sshtresh : 1;
@@ -185,12 +195,8 @@ public class TCPSocketImpl extends TCPSocket {
             win.sshtresh = win.cwnd/2;
             win.cwnd = win.sshtresh + 3;
             onWindowChange();
+            retransmitMissingSegment();
             win.congestionState = Window.congestionStates.FAST_RECOVERY;
-            try {
-                this.udp.send(win.packets.get(win.base).getUDPPacket());
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
         }
     }
 
@@ -207,7 +213,9 @@ public class TCPSocketImpl extends TCPSocket {
                handleDupAck();
             }
             else if(receivedPacket.getAcknowledgmentNumber() >= win.base){
-                if((++cwndCounter) == win.cwnd)
+                int ackSize = receivedPacket.getAcknowledgmentNumber() - lastAcked;
+                cwndCounter += ackSize;
+                if(cwndCounter >= win.cwnd)
                 {
                     win.cwnd ++;
                     onWindowChange();
@@ -226,7 +234,8 @@ public class TCPSocketImpl extends TCPSocket {
                 handleDupAck();
             }
             else if(receivedPacket.getAcknowledgmentNumber() >= win.base){
-                win.cwnd++;
+                int ackSize = receivedPacket.getAcknowledgmentNumber() - lastAcked;
+                win.cwnd += ackSize;
                 onWindowChange();
                 win.dupAckCount = 0;
                 moveBase(receivedPacket);
@@ -243,7 +252,8 @@ public class TCPSocketImpl extends TCPSocket {
         {
             if(!isWindowFull() &&
                 chunkMaker.hasRemainingChunk(win.nextSeqNum)
-                && hasReceiverEnoughSize())
+                    && hasReceiverEnoughSize()
+                )
             {
                 win.packets.put(win.nextSeqNum,  new TCPPacket(
                         destinationIp,
@@ -255,12 +265,10 @@ public class TCPSocketImpl extends TCPSocket {
                         chunkMaker.getChunk(win.nextSeqNum)));
                 udp.send(win.packets.get(win.nextSeqNum).getUDPPacket());
                 System.out.println("data sent with seq : " + win.nextSeqNum);
-                if(win.base == win.nextSeqNum) {
-                    restartTimer();
-                }
                 win.nextSeqNum ++;
             }
             else{
+                System.out.println("Can not Send " + win.nextSeqNum + " " + win.base);
                 if(!chunkMaker.hasRemainingChunk(win.nextSeqNum)){
                     System.out.println("finish");
                     for (int i = 0; i < 100; i++) {
@@ -453,7 +461,7 @@ public class TCPSocketImpl extends TCPSocket {
                     new byte[0],
                     this.receiverWindow);
             this.udp.send(sendPacket.getUDPPacket());
-            this.expectedSequenceNumber ++;
+//            this.expectedSequenceNumber ++;
             this.receiverState = receiverStates.RECEIVE;
             System.out.println("send seq Ack : " + this.acknowledgmentNumber);
         } catch (IOException e) {
@@ -465,7 +473,13 @@ public class TCPSocketImpl extends TCPSocket {
     private void printToFile(TCPPacket receivedPacket , String pathToFile) {
         try {
             OutputStream os = new FileOutputStream(new File(pathToFile), true);
-            os.write(receivedPacket.getData());
+            while(recBuff.containsKey(this.expectedSequenceNumber))
+            {
+                os.write(receivedPacket.getData());
+                recBuff.remove(this.expectedSequenceNumber);
+                this.acknowledgmentNumber = this.expectedSequenceNumber;
+                this.expectedSequenceNumber ++;
+            }
             os.close();
             this.receiverState = receiverStates.SEND_ACK;
         } catch (IOException e) {
@@ -474,6 +488,8 @@ public class TCPSocketImpl extends TCPSocket {
 
     }
 
+
+    private HashMap<Integer, TCPPacket> recBuff = new HashMap<>();
     private TCPPacket goBackNReceive() {
         try {
             System.out.println("receive expected : " + this.expectedSequenceNumber);
@@ -481,7 +497,6 @@ public class TCPSocketImpl extends TCPSocket {
             DatagramPacket data = new DatagramPacket(buff, buff.length);
             this.udp.receive(data);
             TCPPacket receivedPacket = new TCPPacket(data);
-            System.out.println("receiver get : " + receivedPacket.getSquenceNumber());
             if(receivedPacket.isFIN())
             {
                 receiverState = receiverStates.CLOSE;
@@ -489,6 +504,8 @@ public class TCPSocketImpl extends TCPSocket {
             }
             if(receivedPacket.getAckFlag() || receivedPacket.getSynFlag())
                 return null;
+            System.out.println("receiver get : " + receivedPacket.getSquenceNumber());
+            recBuff.put(receivedPacket.getSquenceNumber(), receivedPacket);
             if(receivedPacket.getSquenceNumber() == this.expectedSequenceNumber){
                 this.acknowledgmentNumber = receivedPacket.getSquenceNumber();
                 this.receiverState = receiverStates.WRITE_TO_FILE;
@@ -512,11 +529,13 @@ public class TCPSocketImpl extends TCPSocket {
 
     @Override
     public long getSSThreshold() {
-        return win.sshtresh;
+        int windowSStresh = win.sshtresh;
+        return windowSStresh;
     }
 
     @Override
     public long getWindowSize() {
-        return win.cwnd;
+        int windowSize = win.cwnd;
+        return windowSize;
     }
 }
