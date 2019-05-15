@@ -51,6 +51,8 @@ public class TCPSocketImpl extends TCPSocket {
     private byte[] cumulativeData = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 20];
     private int cumulativeDataIndex = 0;
     private int nextCumulativeSeqNum = 0;
+    private int highWater;
+    private int lastPacketSent;
 
 
     public TCPSocketImpl(String ip, int port) throws Exception {
@@ -181,8 +183,14 @@ public class TCPSocketImpl extends TCPSocket {
         if(!receivedPacket.getSynFlag() && !receivedPacket.getAckFlag()) {
             if(lastAcked == receivedPacket.getAcknowledgmentNumber()){
                 win.cwnd += 1;
-                onWindowChange();
                 this.senderState = senderStates.SEND;
+            }
+            else if(receivedPacket.getAcknowledgmentNumber() >= win.base && // Partial ACK
+                    receivedPacket.getAcknowledgmentNumber() < highWater)
+            {
+                win.cwnd = win.cwnd - (lastAcked - receivedPacket.getAcknowledgmentNumber());
+                moveBase(receivedPacket);
+                retransmitMissingSegment();
             }
             else if(receivedPacket.getAcknowledgmentNumber() >= win.base){
                 win.cwnd = win.sshtresh != 0 ? win.sshtresh : 1;
@@ -203,6 +211,7 @@ public class TCPSocketImpl extends TCPSocket {
             win.cwnd = win.sshtresh + 3;
             onWindowChange();
             retransmitMissingSegment();
+            highWater = lastPacketSent;
             win.congestionState = Window.congestionStates.FAST_RECOVERY;
         }
     }
@@ -300,6 +309,7 @@ public class TCPSocketImpl extends TCPSocket {
                             data));
                     udp.send(win.packets.get(win.nextSeqNum).getUDPPacket());
                     System.out.println("data sent with seq : " + win.nextSeqNum);
+                    lastPacketSent = win.nextSeqNum;
                     win.nextSeqNum++;
                     Arrays.fill(cumulativeData, (byte) 0);
                     cumulativeDataIndex = 0;
@@ -337,6 +347,7 @@ public class TCPSocketImpl extends TCPSocket {
                         chunkMaker.getChunk(win.nextSeqNum)));
                 udp.send(win.packets.get(win.nextSeqNum).getUDPPacket());
                 System.out.println("data sent with seq : " + win.nextSeqNum);
+                lastPacketSent = win.nextSeqNum;
                 win.nextSeqNum++;
             } else {
                 System.out.println("Can not Send " + win.nextSeqNum + " " + win.base);
