@@ -47,7 +47,7 @@ public class TCPSocketImpl extends TCPSocket {
     private final int receiverWindow = Config.RCEIVER_BUFFER_SIZE;
     private int rwnd;
     private Timer timer;
-    public static final int chunkSize = 100;
+    public static final int chunkSize = 10;
     private byte[] cumulativeData = new byte[EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 20];
     private int cumulativeDataIndex = 0;
     private int nextCumulativeSeqNum = 0;
@@ -283,11 +283,12 @@ public class TCPSocketImpl extends TCPSocket {
                 chunkMaker.hasRemainingChunk(nextCumulativeSeqNum) &&
                 hasReceiverEnoughSize()
             ) {
-                System.out.println("cum: " + cumulativeDataIndex);
                 System.arraycopy(chunkMaker.getChunk(nextCumulativeSeqNum), 0, cumulativeData, cumulativeDataIndex, chunkMaker.getChunk(nextCumulativeSeqNum).length);
                 cumulativeDataIndex += chunkMaker.getChunk(nextCumulativeSeqNum).length;
                 nextCumulativeSeqNum++;
                 if (cumulativeDataIndex >= (EnhancedDatagramSocket.DEFAULT_PAYLOAD_LIMIT_IN_BYTES - 200) || !chunkMaker.hasRemainingChunk(nextCumulativeSeqNum)) {
+                    byte[] data = new byte[cumulativeDataIndex];
+                    System.arraycopy(cumulativeData , 0 , data , 0 , cumulativeDataIndex);
                     win.packets.put(win.nextSeqNum, new TCPPacket(
                             destinationIp,
                             destinationPort,
@@ -296,7 +297,7 @@ public class TCPSocketImpl extends TCPSocket {
                             false,
                             false,
                             cumulativeDataIndex,
-                            cumulativeData));
+                            data));
                     udp.send(win.packets.get(win.nextSeqNum).getUDPPacket());
                     System.out.println("data sent with seq : " + win.nextSeqNum);
                     win.nextSeqNum++;
